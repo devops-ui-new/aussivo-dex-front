@@ -1,3 +1,4 @@
+import { API } from "../config/api";
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
@@ -82,7 +83,7 @@ function MiniChart() {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { API, account, token } = useWeb3();
+  const { account, token } = useWeb3();
   const navigate = useNavigate();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");

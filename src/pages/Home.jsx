@@ -1,16 +1,15 @@
+import { API } from "../config/api";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useWeb3 } from "../context/Web3Context";
 import StatsBar from "../components/StatsBar";
 import PoolCard from "../components/PoolCard";
 
 export default function Home() {
-  const { API } = useWeb3();
   const [pools, setPools] = useState([]);
 
   useEffect(() => {
     fetch(`${API}/api/pools`).then(r => r.json()).then(setPools).catch(() => {});
-  }, [API]);
+  }, []);
 
   const topPools = pools.filter(p => p.active).slice(0, 3);
 

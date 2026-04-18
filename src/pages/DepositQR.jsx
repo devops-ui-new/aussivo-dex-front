@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 
-const API = "http://localhost:4000";
+import { API } from "../config/api";
 
 export default function DepositQR() {
   const { vaultId } = useParams();

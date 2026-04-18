@@ -1,9 +1,9 @@
+import { API } from "../config/api";
 import { useEffect, useState } from "react";
-import { useWeb3 } from "../context/Web3Context";
 import PoolCard from "../components/PoolCard";
 
 export default function Pools() {
-  const { API } = useWeb3();
+  // API imported from config
   const [pools, setPools] = useState([]);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("popularity");
@@ -11,7 +11,7 @@ export default function Pools() {
 
   useEffect(() => {
     fetch(`${API}/api/pools`).then(r => r.json()).then(setPools).catch(() => {});
-  }, [API]);
+  }, []);
 
   let filtered = pools.filter(p => {
     if (!p.active) return false;

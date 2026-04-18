@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
-const API = "http://localhost:4000";
+import { API } from "../config/api";
 
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();

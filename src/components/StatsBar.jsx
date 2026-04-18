@@ -1,8 +1,8 @@
+import { API } from "../config/api";
 import { useEffect, useState } from "react";
-import { useWeb3 } from "../context/Web3Context";
 
 export default function StatsBar() {
-  const { API } = useWeb3();
+  // API imported from config
   const [stats, setStats] = useState({ tvl: "0", activePools: 0, totalUsers: 0, totalDeposits: 0 });
 
   useEffect(() => {

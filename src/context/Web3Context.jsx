@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 const Web3Ctx = createContext(null);
 export const useWeb3 = () => useContext(Web3Ctx);
 
-const API = "http://localhost:4000";
+import { API } from "../config/api";
 
 const WALLETS = [
   { id: "metamask", name: "MetaMask", icon: "🦊", check: () => window.ethereum?.isMetaMask },

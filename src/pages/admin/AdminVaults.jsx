@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import toast from "react-hot-toast";
 
-const API = "http://localhost:4000";
+import { API } from "../../config/api";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
 
 const EMPTY_FORM = { name: "", description: "", asset: "USDT", vaultType: "locked", lockDays: 30, durationMonths: 12, minDeposit: 50, maxDeposit: 100000, capacity: 5000000, earlyExitFeeBps: 500, tiers: [{ minAmount: 50, maxAmount: 5000, apyPercent: 1 }, { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 }, { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }], strategies: [{ name: "Aave V3", allocation: 40, protocol: "aave" }, { name: "Reserve", allocation: 60, protocol: "reserve" }] };

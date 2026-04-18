@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
-const API = "http://localhost:4000";
+import { API } from "../../config/api";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");

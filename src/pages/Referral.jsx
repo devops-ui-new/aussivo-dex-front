@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
-const API = "http://localhost:4000";
+import { API } from "../config/api";
 
 export default function Referral() {
   const { token, user } = useWeb3();
