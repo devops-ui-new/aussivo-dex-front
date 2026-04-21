@@ -125,6 +125,36 @@ export function Web3Provider({ children }) {
     if (d.status === 200) setUser(d.data);
   };
 
+  const linkWallet = async (walletAddress) => {
+    if (!token || !walletAddress) return null;
+    const res = await fetch(`${API}/api/user/link-wallet`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ walletAddress }),
+    });
+    const d = await res.json();
+    if (d.status === 200) { await refreshUser(); }
+    return d;
+  };
+
+  // When a logged-in user has a different wallet connected than the one on their record,
+  // auto-sync so on-chain deposits route to the right account.
+  useEffect(() => {
+    if (!token || !user || !account) return;
+    const registered = (user.walletAddress || "").toLowerCase();
+    const connected = account.toLowerCase();
+    if (!connected || connected === registered) return;
+    if (registered && !registered.startsWith("0x")) {
+      // Registered value is a placeholder like "email_…" — silently upgrade it
+      linkWallet(connected);
+    } else {
+      linkWallet(connected).then(d => {
+        if (d?.status === 200) toast.success(`Wallet updated to ${connected.slice(0, 6)}…${connected.slice(-4)}`);
+        else if (d?.status === 409) toast.error("This wallet is already linked to another account");
+      });
+    }
+  }, [token, user?.walletAddress, account]);
+
   const isLoggedIn = !!(token && user);
   const short = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "";
 
@@ -132,7 +162,7 @@ export function Web3Provider({ children }) {
     <Web3Ctx.Provider value={{
       account, provider, signer, chainId, token, user, short, availableWallets,
       isLoggedIn, needsRegistration,
-      connectWallet, disconnect, sendOTP, verifyOTP, refreshUser, API,
+      connectWallet, disconnect, sendOTP, verifyOTP, refreshUser, linkWallet, API,
     }}>
       {children}
     </Web3Ctx.Provider>

@@ -5,6 +5,28 @@ import toast from "react-hot-toast";
 
 import { API } from "../config/api";
 
+function LockCountdown({ unlockAt }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ms = new Date(unlockAt).getTime() - now;
+  if (ms <= 0) return <span className="tag tag-green text-xs">Unlocked</span>;
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return (
+    <div className="text-right">
+      <div className="text-[10px] text-muted uppercase tracking-wider">Unlocks in</div>
+      <div className="font-mono text-sm font-semibold text-yellow-400">
+        {d}d {String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();
   const [deposits, setDeposits] = useState([]);
@@ -22,7 +44,12 @@ export default function Portfolio() {
     refreshUser();
   };
 
-  useEffect(load, [token]);
+  useEffect(() => {
+    load();
+    if (!token) return;
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [token]);
 
   const handleWithdraw = async (amount, asset, source) => {
     if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
@@ -98,6 +125,10 @@ export default function Portfolio() {
           {activeDeposits.map((d, i) => {
             const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
             const isLocked = lockDate && lockDate > new Date();
+            const vaultId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
+            const vaultName = d.vaultId?.name || "Vault";
+            const monthlyApy = Number(d.apyPercent || 0);
+            const annualApy = (monthlyApy * 12).toFixed(1);
             return (
               <div key={i} className="glass p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -105,14 +136,18 @@ export default function Portfolio() {
                     {d.asset === "USDC" ? "$" : "₮"}
                   </div>
                   <div>
-                    <div className="font-semibold">{d.vaultId?.name || "Vault"}</div>
-                    <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {d.apyPercent}% monthly</div>
+                    {vaultId ? (
+                      <Link to={`/pool/${vaultId}`} className="font-semibold hover:text-brand transition-colors">{vaultName} →</Link>
+                    ) : (
+                      <div className="font-semibold">{vaultName}</div>
+                    )}
+                    <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
                     <div className="text-xs text-muted mt-0.5">Yield paid: {d.yieldPaymentsCount}/{d.maxYieldPayments} months</div>
                   </div>
                 </div>
                 <div className="text-right">
                   {isLocked ? (
-                    <span className="tag tag-yellow text-xs">Locked until {lockDate.toLocaleDateString()}</span>
+                    <LockCountdown unlockAt={d.lockUntil} />
                   ) : (
                     <span className="tag tag-green text-xs">Flexible</span>
                   )}

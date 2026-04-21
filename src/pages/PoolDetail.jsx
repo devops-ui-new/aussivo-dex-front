@@ -1,8 +1,34 @@
 import { API } from "../config/api";
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
+import { ethers } from "ethers";
 import toast from "react-hot-toast";
+
+const ERC20_ABI = [
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address owner) view returns (uint256)",
+  "function symbol() view returns (string)",
+];
+
+const RPC_BY_CHAIN = {
+  56: [
+    "https://bsc-rpc.publicnode.com",
+    "https://binance.llamarpc.com",
+    "https://bsc-dataseed.bnbchain.org",
+  ],
+  97: [
+    "https://bsc-testnet-rpc.publicnode.com",
+    "https://bsc-testnet.public.blastapi.io",
+    "https://data-seed-prebsc-1-s1.binance.org:8545",
+  ],
+};
+
+const readProvider = (chainId) => {
+  const rpcs = RPC_BY_CHAIN[Number(chainId)] || RPC_BY_CHAIN[97];
+  return new ethers.JsonRpcProvider(rpcs[0], Number(chainId));
+};
 
 const STRATEGIES = {
   0: [ { name: "Aave V3", pct: 40, color: "#B6509E", apy: "4.2%" }, { name: "Compound", pct: 30, color: "#00D395", apy: "3.8%" }, { name: "Reserve", pct: 30, color: "#3B82F6", apy: "—" } ],
@@ -41,11 +67,14 @@ function DonutChart({ strategies }) {
 function MiniChart() {
   const points = [];
   let val = 0;
+  // Trend upward so the curve reaches ~18% APY by the end of the window.
   for (let i = 0; i < 30; i++) {
-    val += (Math.random() - 0.35) * 0.4;
-    val = Math.max(-1, Math.min(6, val));
+    val += (Math.random() - 0.1) * 1.5;
+    val = Math.max(0, Math.min(18, val));
     points.push(val);
   }
+  // Anchor the final point to 18 so the chart always tops out at 18% APY.
+  points[points.length - 1] = 18;
   const min = Math.min(...points), max = Math.max(...points);
   const w = 600, h = 200, pad = 20;
   const pts = points.map((p, i) => {
@@ -83,32 +112,125 @@ function MiniChart() {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { account, token } = useWeb3();
-  const navigate = useNavigate();
+  const { account, token, signer, connectWallet } = useWeb3();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [txHash, setTxHash] = useState(null);
   const [tab, setTab] = useState("invest");
   const [timeframe, setTimeframe] = useState("1W");
+  const [qrData, setQrData] = useState(null);
 
   useEffect(() => { fetch(`${API}/api/pools/${id}`).then(r => r.json()).then(setPool).catch(() => {}); }, [API, id]);
 
   if (!pool) return <div className="max-w-6xl mx-auto px-6 py-20"><div className="h-[500px] shimmer rounded-2xl" /></div>;
 
   const strategies = STRATEGIES[pool.id] || STRATEGIES[0];
-  const apy = (pool.apy_bps / 100).toFixed(1);
-  const monthly = (pool.apy_bps / 100 / 12).toFixed(2);
+  const apy = parseFloat(pool.apy || 0).toFixed(1);
+  const monthly = parseFloat(pool.apyMonthly || 0).toFixed(2);
   const lockLabel = pool.lockDays > 0 ? `${pool.lockDays} Days` : "Flexible";
   const earlyFee = (pool.early_exit_fee_bps / 100).toFixed(0);
-  const projectedMonthly = amount ? (parseFloat(amount) * pool.apy_bps / 100 / 12).toFixed(2) : "0.00";
+  const projectedMonthly = amount ? (parseFloat(amount) * parseFloat(pool.apyMonthly || 0) / 100).toFixed(2) : "0.00";
   const tvlNum = Number(pool.total_staked) / 1e6;
   const capNum = Number(pool.capacity) / 1e6;
 
-  const handleDeposit = () => {
+  const ensureChain = async (targetChainId) => {
+    if (!window.ethereum) throw new Error("No wallet detected");
+    const hex = "0x" + Number(targetChainId).toString(16);
+    const current = await window.ethereum.request({ method: "eth_chainId" });
+    if (current?.toLowerCase() === hex.toLowerCase()) return;
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    } catch (err) {
+      if (err?.code === 4902) {
+        const isMainnet = Number(targetChainId) === 56;
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: hex,
+            chainName: isMainnet ? "BNB Smart Chain" : "BSC Testnet",
+            nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+            rpcUrls: RPC_BY_CHAIN[Number(targetChainId)] || [],
+            blockExplorerUrls: [isMainnet ? "https://bscscan.com" : "https://testnet.bscscan.com"],
+          }],
+        });
+      } else throw err;
+    }
+  };
+
+  const handlePayWithWallet = async () => {
+    if (!qrData) return;
+    if (!window.ethereum) { toast.error("Install MetaMask or a compatible wallet"); return; }
+    setPaying(true);
+    try {
+      let activeSigner = signer;
+      if (!activeSigner) {
+        await connectWallet();
+        const p = new ethers.BrowserProvider(window.ethereum);
+        activeSigner = await p.getSigner();
+      }
+      await ensureChain(qrData.chainId);
+      const freshProvider = new ethers.BrowserProvider(window.ethereum);
+      activeSigner = await freshProvider.getSigner();
+
+      const senderAddr = await activeSigner.getAddress();
+      const readRpc = readProvider(qrData.chainId);
+      const erc20Read = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, readRpc);
+      const [decimalsRaw, symbolRaw, balance] = await Promise.all([
+        erc20Read.decimals().catch(() => 18),
+        erc20Read.symbol().catch(() => qrData.asset),
+        erc20Read.balanceOf(senderAddr).catch(() => 0n),
+      ]);
+      const decimals = Number(decimalsRaw);
+      const value = ethers.parseUnits(String(qrData.amount), decimals);
+      const erc20 = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, activeSigner);
+      if (balance < value) {
+        const have = Number(ethers.formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const networkLabel = Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet";
+        const shortAddr = `${senderAddr.slice(0, 6)}…${senderAddr.slice(-4)}`;
+        toast.error(
+          `Wallet ${shortAddr} holds ${have} ${symbolRaw} on ${networkLabel} (need ${qrData.amount}). ` +
+          `Confirm MetaMask is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
+          { id: "pay", duration: 10000 }
+        );
+        console.log("[Pay debug]", { senderAddr, tokenAddress: qrData.tokenAddress, chainId: qrData.chainId, balance: balance.toString(), decimals, symbol: symbolRaw });
+        setPaying(false);
+        return;
+      }
+
+      toast.loading("Confirm in your wallet...", { id: "pay" });
+      const tx = await erc20.transfer(qrData.depositAddress, value);
+      toast.loading("Waiting for confirmation...", { id: "pay" });
+      setTxHash(tx.hash);
+      await tx.wait(1);
+      toast.success("Payment confirmed! Deposit will appear in your portfolio shortly.", { id: "pay" });
+    } catch (err) {
+      const raw = err?.shortMessage || err?.reason || err?.data?.message || err?.message || "Transaction failed";
+      const friendly = /transfer amount exceeds balance/i.test(raw)
+        ? `Insufficient token balance on ${Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet"}. Make sure the wallet holds ${qrData.asset} on the correct network.`
+        : raw;
+      toast.error(friendly, { id: "pay", duration: 8000 });
+    }
+    setPaying(false);
+  };
+
+  const handleDeposit = async () => {
     if (!token) { toast.error("Please sign in first"); return; }
     if (!amount || parseFloat(amount) <= 0) { toast.error("Enter an amount"); return; }
-    // Navigate to QR deposit page
-    navigate(`/deposit/${pool._id || id}`);
+    setLoading(true);
+    try {
+      const authToken = localStorage.getItem("aussivo_token");
+      const res = await fetch(`${API}/api/user/deposit/qr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ vaultId: pool._id || id, amount: parseFloat(amount) }),
+      });
+      const data = await res.json();
+      if (data.status === 200) setQrData(data.data);
+      else toast.error(data.message || "Failed to generate QR");
+    } catch { toast.error("Failed to generate QR"); }
+    setLoading(false);
   };
 
   return (
@@ -124,7 +246,7 @@ export default function PoolDetail() {
       {/* ═══ HEADER ═══ */}
       <div className="flex items-start justify-between mb-2">
         <div>
-          <h1 className="font-display font-bold text-2xl text-gray-900 mb-2">{pool.name}</h1>
+          <h1 className="font-display font-bold text-2xl text-white mb-2">{pool.name}</h1>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <div className="flex items-center gap-1.5">
               {strategies.slice(0, 3).map((s, i) => (
@@ -296,7 +418,53 @@ export default function PoolDetail() {
               ))}
             </div>
 
-            {tab === "invest" ? (<>
+            {tab === "invest" ? (qrData ? (
+              <div className="text-center">
+                <img src={qrData.qrCode} alt="Deposit QR" className="mx-auto w-56 h-56 rounded-xl border-2 border-brand/20 mb-4" />
+                <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                  <div className="text-xs text-gray-400 mb-1">Send exactly</div>
+                  <div className="text-xl font-display font-bold text-brand-dark">{qrData.amount} {qrData.asset}</div>
+                  <div className="text-xs text-gray-400 mt-1">on {qrData.network}</div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4 mb-4 text-left">
+                  <div className="text-xs text-gray-400 mb-1">To Address</div>
+                  <div className="text-sm font-mono break-all text-gray-700">{qrData.depositAddress}</div>
+                  <button onClick={() => { navigator.clipboard.writeText(qrData.depositAddress); toast.success("Copied!"); }}
+                    className="mt-2 text-xs text-brand-dark hover:underline">Copy Address</button>
+                </div>
+                {qrData.instructions?.length > 0 && (
+                  <div className="text-left space-y-2 mb-4">
+                    {qrData.instructions.map((inst, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs text-gray-500">
+                        <span className="text-brand-dark mt-0.5">•</span><span>{inst}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={handlePayWithWallet} disabled={paying}
+                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2">
+                  <span>🦊</span>
+                  {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
+                </button>
+                <div className="text-[11px] text-gray-400 mb-3">
+                  Opens MetaMask / Trust / Coinbase to sign an ERC-20 transfer. No QR scan needed.
+                </div>
+
+                {txHash && (
+                  <a href={`${Number(qrData.chainId) === 56 ? "https://bscscan.com" : "https://testnet.bscscan.com"}/tx/${txHash}`}
+                    target="_blank" rel="noreferrer"
+                    className="block text-xs text-brand-dark hover:underline mb-3 break-all">
+                    View tx: {txHash.slice(0, 10)}…{txHash.slice(-8)} ↗
+                  </a>
+                )}
+
+                <button onClick={() => { setQrData(null); setTxHash(null); }}
+                  className="w-full py-3 rounded-xl font-semibold text-sm border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  Generate New QR
+                </button>
+              </div>
+            ) : (<>
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-500">Amount</span>
@@ -325,9 +493,9 @@ export default function PoolDetail() {
 
               <button onClick={handleDeposit} disabled={loading}
                 className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20">
-                {loading ? "Processing..." : token ? "Deposit Now →" : "Sign In to Invest"}
+                {loading ? "Generating QR..." : token ? "Deposit Now →" : "Sign In to Invest"}
               </button>
-            </>) : (
+            </>)) : (
               <div className="text-center py-8">
                 <p className="text-sm text-gray-500 mb-4">Manage your redemptions from your <Link to="/portfolio" className="text-brand-dark font-semibold hover:underline">Portfolio</Link>.</p>
               </div>

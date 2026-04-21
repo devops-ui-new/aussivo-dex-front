@@ -20,16 +20,16 @@ export default function Pools() {
     if (filter === "usdt") return p.assetSymbol === "USDT";
     if (filter === "flexible") return p.lock_period === 0;
     if (filter === "locked") return p.lock_period > 0;
-    if (filter === "top") return p.apy_bps >= 1200;
+    if (filter === "top") return parseFloat(p.apy || 0) >= 12;
     return true;
   });
 
-  if (sort === "apy") filtered.sort((a, b) => b.apy_bps - a.apy_bps);
+  if (sort === "apy") filtered.sort((a, b) => parseFloat(b.apy || 0) - parseFloat(a.apy || 0));
   if (sort === "tvl") filtered.sort((a, b) => Number(b.total_staked) - Number(a.total_staked));
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
-      <h1 className="font-display font-bold text-3xl text-gray-900 mb-2">Yield Vaults</h1>
+      <h1 className="font-display font-bold text-3xl text-white mb-2">Yield Vaults</h1>
       <p className="text-gray-500 mb-8 max-w-xl">
         Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
       </p>
