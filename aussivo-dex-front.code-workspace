@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../aussivo-dex-backend"
+		},
+		{
+			"path": "../Downloads/contracts"
+		}
+	],
+	"settings": {}
+}
