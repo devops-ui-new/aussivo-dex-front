@@ -1,5 +1,5 @@
 import { API } from "../config/api";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import { ethers } from "ethers";
@@ -64,17 +64,25 @@ function DonutChart({ strategies }) {
   );
 }
 
-function MiniChart() {
-  const points = [];
-  let val = 0;
-  // Trend upward so the curve reaches ~18% APY by the end of the window.
-  for (let i = 0; i < 30; i++) {
-    val += (Math.random() - 0.1) * 1.5;
-    val = Math.max(0, Math.min(18, val));
-    points.push(val);
-  }
-  // Anchor the final point to 18 so the chart always tops out at 18% APY.
-  points[points.length - 1] = 18;
+function MiniChart({ seed = 1 }) {
+  const points = useMemo(() => {
+    // Deterministic pseudo-random so the curve is stable across re-renders
+    // (e.g. when the user types an amount) but still varies per pool.
+    let s = seed * 9301 + 49297;
+    const rand = () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+    const p = [];
+    let val = 0;
+    for (let i = 0; i < 30; i++) {
+      val += (rand() - 0.1) * 1.5;
+      val = Math.max(0, Math.min(18, val));
+      p.push(val);
+    }
+    p[p.length - 1] = 18;
+    return p;
+  }, [seed]);
   const min = Math.min(...points), max = Math.max(...points);
   const w = 600, h = 200, pad = 20;
   const pts = points.map((p, i) => {
@@ -283,7 +291,7 @@ export default function PoolDetail() {
                 ))}
               </div>
             </div>
-            <MiniChart />
+            <MiniChart seed={Number(pool.id) + 1} />
           </div>
 
           {/* Constituents */}

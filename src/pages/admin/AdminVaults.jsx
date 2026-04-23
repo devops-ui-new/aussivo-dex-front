@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { API } from "../../config/api";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
 
-const EMPTY_FORM = { name: "", description: "", asset: "USDT", vaultType: "locked", lockDays: 30, durationMonths: 12, minDeposit: 50, maxDeposit: 100000, capacity: 5000000, earlyExitFeeBps: 500, tiers: [{ minAmount: 50, maxAmount: 5000, apyPercent: 1 }, { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 }, { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }], strategies: [{ name: "Aave V3", allocation: 40, protocol: "aave" }, { name: "Reserve", allocation: 60, protocol: "reserve" }] };
+const EMPTY_FORM = { name: "", description: "", asset: "USDT", vaultType: "locked", lockDays: 30, durationMonths: 12, minDeposit: 50, maxDeposit: 100000, capacity: 5000000, earlyExitFeeBps: 500, displayApy: 18, tiers: [{ minAmount: 50, maxAmount: 5000, apyPercent: 1 }, { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 }, { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }], strategies: [{ name: "Aave V3", allocation: 40, protocol: "aave" }, { name: "Reserve", allocation: 60, protocol: "reserve" }] };
 
 export default function AdminVaults() {
   const [vaults, setVaults] = useState([]);
@@ -24,7 +24,8 @@ export default function AdminVaults() {
     try {
       const url = editId ? `${API}/api/admin/vaults/${editId}` : `${API}/api/admin/vaults`;
       const method = editId ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: hdr(), body: JSON.stringify(form) });
+      const payload = { ...form, displayApy: form.displayApy === "" || form.displayApy == null ? null : Number(form.displayApy) };
+      const res = await fetch(url, { method, headers: hdr(), body: JSON.stringify(payload) });
       const d = await res.json();
       if (d.status === 200 || d.status === 201) {
         toast.success(editId ? "Vault updated" : "Vault created");
@@ -35,7 +36,7 @@ export default function AdminVaults() {
   };
 
   const editVault = (v) => {
-    setForm({ name: v.name, description: v.description || "", asset: v.asset, vaultType: v.vaultType, lockDays: v.lockDays, durationMonths: v.durationMonths, minDeposit: v.minDeposit, maxDeposit: v.maxDeposit, capacity: v.capacity, earlyExitFeeBps: v.earlyExitFeeBps, tiers: v.tiers, strategies: v.strategies || [] });
+    setForm({ name: v.name, description: v.description || "", asset: v.asset, vaultType: v.vaultType, lockDays: v.lockDays, durationMonths: v.durationMonths, minDeposit: v.minDeposit, maxDeposit: v.maxDeposit, capacity: v.capacity, earlyExitFeeBps: v.earlyExitFeeBps, displayApy: v.displayApy ?? "", tiers: v.tiers, strategies: v.strategies || [] });
     setEditId(v._id); setShowForm(true);
   };
 
@@ -67,6 +68,7 @@ export default function AdminVaults() {
             <div><label className="text-xs text-muted mb-1 block">Min Deposit</label><input type="number" value={form.minDeposit} onChange={e => set("minDeposit", +e.target.value)} className="input-field text-sm" /></div>
             <div><label className="text-xs text-muted mb-1 block">Max Deposit</label><input type="number" value={form.maxDeposit} onChange={e => set("maxDeposit", +e.target.value)} className="input-field text-sm" /></div>
             <div><label className="text-xs text-muted mb-1 block">Early Exit Fee (bps)</label><input type="number" value={form.earlyExitFeeBps} onChange={e => set("earlyExitFeeBps", +e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Display APY % (public)</label><input type="number" step="0.01" placeholder="Blank = tier-based" value={form.displayApy ?? ""} onChange={e => set("displayApy", e.target.value === "" ? "" : +e.target.value)} className="input-field text-sm" /></div>
           </div>
           <div><label className="text-xs text-muted mb-1 block">Description</label><input value={form.description} onChange={e => set("description", e.target.value)} className="input-field text-sm" /></div>
 
