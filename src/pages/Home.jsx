@@ -25,7 +25,7 @@ export default function Home() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 bg-brand/5 border border-brand/15 rounded-full px-4 py-1.5 mb-8">
               <div className="pulse-dot" style={{ width: 6, height: 6 }} />
-              <span className="text-xs font-medium text-brand/80 tracking-wide">PROTOCOL LIVE ON ARBITRUM</span>
+              <span className="text-xs font-medium text-brand/80 tracking-wide">PROTOCOL LIVE ON BSC</span>
             </div>
 
             <h1 className="font-display font-extrabold text-5xl md:text-6xl lg:text-7xl leading-[1.08] tracking-tight mb-6">
