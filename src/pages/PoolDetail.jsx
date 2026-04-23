@@ -64,25 +64,29 @@ function DonutChart({ strategies }) {
   );
 }
 
-function MiniChart({ seed = 1 }) {
+function MiniChart({ seed = "0", apy = 18 }) {
   const points = useMemo(() => {
-    // Deterministic pseudo-random so the curve is stable across re-renders
-    // (e.g. when the user types an amount) but still varies per pool.
-    let s = seed * 9301 + 49297;
+    const target = Number(apy) || 0;
+    // Hash the string seed so we get a stable numeric seed from a Mongo ObjectId.
+    let h = 2166136261;
+    const str = String(seed);
+    for (let i = 0; i < str.length; i++) h = ((h ^ str.charCodeAt(i)) * 16777619) >>> 0;
+    let s = h || 1;
     const rand = () => {
       s = (s * 9301 + 49297) % 233280;
       return s / 233280;
     };
     const p = [];
-    let val = 0;
+    const ceiling = Math.max(target, 1);
+    let val = target * 0.1;
     for (let i = 0; i < 30; i++) {
-      val += (rand() - 0.1) * 1.5;
-      val = Math.max(0, Math.min(18, val));
+      val += (rand() - 0.1) * (ceiling / 12);
+      val = Math.max(0, Math.min(ceiling, val));
       p.push(val);
     }
-    p[p.length - 1] = 18;
+    p[p.length - 1] = target;
     return p;
-  }, [seed]);
+  }, [seed, apy]);
   const min = Math.min(...points), max = Math.max(...points);
   const w = 600, h = 200, pad = 20;
   const pts = points.map((p, i) => {
@@ -291,7 +295,7 @@ export default function PoolDetail() {
                 ))}
               </div>
             </div>
-            <MiniChart seed={Number(pool.id) + 1} />
+            <MiniChart seed={pool.id} apy={apy} />
           </div>
 
           {/* Constituents */}

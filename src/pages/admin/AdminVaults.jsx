@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/admin/AdminLayout";
 import toast from "react-hot-toast";
 
@@ -8,13 +9,28 @@ const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token"
 const EMPTY_FORM = { name: "", description: "", asset: "USDT", vaultType: "locked", lockDays: 30, durationMonths: 12, minDeposit: 50, maxDeposit: 100000, capacity: 5000000, earlyExitFeeBps: 500, displayApy: 18, tiers: [{ minAmount: 50, maxAmount: 5000, apyPercent: 1 }, { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 }, { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }], strategies: [{ name: "Aave V3", allocation: 40, protocol: "aave" }, { name: "Reserve", allocation: 60, protocol: "reserve" }] };
 
 export default function AdminVaults() {
+  const navigate = useNavigate();
   const [vaults, setVaults] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const load = () => fetch(`${API}/api/admin/vaults`, { headers: hdr() }).then(r => r.json()).then(d => setVaults(d.data || [])).catch(() => {});
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/vaults`, { headers: hdr() });
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("admin_token");
+        toast.error("Session expired, please log in again");
+        navigate("/admin/login");
+        return;
+      }
+      const d = await res.json();
+      setVaults(Array.isArray(d.data) ? d.data : []);
+    } catch (e) {
+      toast.error("Failed to load vaults");
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
