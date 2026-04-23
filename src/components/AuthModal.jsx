@@ -3,14 +3,12 @@ import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
 /**
- * Registration modal — ONLY shown for new users.
- * Returning users are auto-logged-in via wallet-auth (no modal needed).
- * 
- * Flow: Enter Email → OTP → Done
- * (Wallet is already connected at this point via Navbar)
+ * Sign-in modal. Every sign-in goes through email + OTP — we never silently re-auth
+ * the session based on a connected wallet. Wallets are linked to the account after
+ * sign-in (each wallet the user connects is appended to their walletAddresses list).
  */
 export default function AuthModal({ onClose }) {
-  const { account, short, sendOTP, verifyOTP } = useWeb3();
+  const { sendOTP, verifyOTP } = useWeb3();
   const [step, setStep] = useState("register"); // register → otp
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -54,8 +52,8 @@ export default function AuthModal({ onClose }) {
 
         <div className="flex items-center justify-between p-5 border-b border-surface-4/50">
           <div>
-            <h2 className="font-display font-bold text-lg text-white">{step === "register" ? "Create Account" : "Verify Email"}</h2>
-            <p className="text-xs text-muted mt-0.5">One-time setup — you won't need to do this again</p>
+            <h2 className="font-display font-bold text-lg text-white">{step === "register" ? "Sign in" : "Verify Email"}</h2>
+            <p className="text-xs text-muted mt-0.5">Sign in with your email — we'll send a one-time code.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-surface-3/80 flex items-center justify-center text-muted hover:text-white">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -70,16 +68,6 @@ export default function AuthModal({ onClose }) {
         <div className="p-5">
           {step === "register" && (
             <div className="space-y-4">
-              {account && (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-brand/5 border border-brand/15">
-                  <div className="pulse-dot" />
-                  <div>
-                    <div className="text-xs text-muted">Wallet Connected</div>
-                    <div className="text-sm font-mono text-brand">{short}</div>
-                  </div>
-                  <span className="ml-auto text-xs text-brand bg-brand/10 px-2 py-0.5 rounded-full">✓ Connected</span>
-                </div>
-              )}
               <div>
                 <label className="text-sm text-muted mb-1.5 block">Email Address *</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="input-field" autoFocus />
@@ -94,7 +82,7 @@ export default function AuthModal({ onClose }) {
                 <input type="text" value={referralCode} onChange={e => setReferralCode(e.target.value)} placeholder="AUSX7K9M (optional)" className="input-field" />
               </div>
               <button onClick={handleSendOTP} disabled={loading || !email} className="btn-primary w-full py-3.5 disabled:opacity-50">
-                {loading ? "Sending..." : "Send Verification Code"}
+                {loading ? "Sending..." : "Send code"}
               </button>
             </div>
           )}
@@ -114,7 +102,7 @@ export default function AuthModal({ onClose }) {
                 <p className="text-[11px] text-muted mt-1.5 text-center">Dev mode: use code <strong className="text-brand">123456</strong></p>
               </div>
               <button onClick={handleVerifyOTP} disabled={loading || otp.length !== 6} className="btn-primary w-full py-3.5 disabled:opacity-50">
-                {loading ? "Verifying..." : "Verify & Create Account"}
+                {loading ? "Verifying..." : "Verify & sign in"}
               </button>
               <div className="flex items-center justify-between">
                 <button onClick={() => { setStep("register"); setOtp(""); }} className="text-xs text-muted hover:text-slate-300">← Change email</button>
@@ -126,7 +114,7 @@ export default function AuthModal({ onClose }) {
 
         <div className="px-5 pb-5">
           <div className="bg-surface-2/30 rounded-xl p-3 text-center">
-            <p className="text-[11px] text-muted">After this one-time setup, you'll auto-login every time you connect your wallet.</p>
+            <p className="text-[11px] text-muted">Every sign-in uses a one-time code. Link any number of wallets after you're signed in.</p>
           </div>
         </div>
       </div>

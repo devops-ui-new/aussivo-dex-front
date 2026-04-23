@@ -21,11 +21,10 @@ export function Web3Provider({ children }) {
   const [chainId, setChainId] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("aussivo_token"));
   const [user, setUser] = useState(null);
-  const [needsRegistration, setNeedsRegistration] = useState(false);
 
   const availableWallets = WALLETS.filter(w => w.check());
 
-  // ── Connect wallet + auto-login if returning user ──
+  // ── Connect wallet (does NOT authenticate — just exposes signer for on-chain actions) ──
   const connectWallet = useCallback(async () => {
     if (!window.ethereum) return null;
     try {
@@ -35,37 +34,15 @@ export function Web3Provider({ children }) {
       const network = await p.getNetwork();
       setProvider(p); setSigner(s); setAccount(accounts[0]); setChainId(Number(network.chainId));
       localStorage.setItem("aussivo_wallet", accounts[0]);
-
-      // If already have valid token, skip auth
-      if (localStorage.getItem("aussivo_token")) return accounts[0];
-
-      // Try instant wallet auth (returning user = no OTP needed)
-      const res = await fetch(`${API}/api/user/wallet-auth`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: accounts[0] }),
-      });
-      const data = await res.json();
-
-      if (data.data?.registered && data.data?.token) {
-        // Returning user — auto-logged in instantly
-        setToken(data.data.token);
-        setUser(data.data.user);
-        localStorage.setItem("aussivo_token", data.data.token);
-        setNeedsRegistration(false);
-        toast.success(`Welcome back, ${data.data.user.name || ""}!`);
-      } else {
-        // New user — needs registration
-        setNeedsRegistration(true);
-      }
-
       return accounts[0];
     } catch (e) { console.error("Connect failed:", e); return null; }
   }, []);
 
   const disconnect = () => {
     setAccount(null); setSigner(null); setProvider(null);
-    setToken(null); setUser(null); setNeedsRegistration(false);
-    localStorage.removeItem("aussivo_token"); localStorage.removeItem("aussivo_wallet");
+    setToken(null); setUser(null);
+    localStorage.removeItem("aussivo_token");
+    localStorage.removeItem("aussivo_wallet");
   };
 
   // ── Validate existing token on page load ──
@@ -80,10 +57,12 @@ export function Web3Provider({ children }) {
       .catch(() => {});
   }, [token]);
 
-  // ── Auto-reconnect wallet on page load ──
+  // ── Auto-reconnect wallet on page load ONLY if the user is still signed in ──
+  // (If they signed out, we do a full cold start — no silent wallet pickup.)
   useEffect(() => {
     const saved = localStorage.getItem("aussivo_wallet");
-    if (saved && window.ethereum) connectWallet();
+    const existingToken = localStorage.getItem("aussivo_token");
+    if (saved && existingToken && window.ethereum) connectWallet();
   }, [connectWallet]);
 
   // ── Listen for wallet changes ──
@@ -95,11 +74,11 @@ export function Web3Provider({ children }) {
     return () => { window.ethereum.removeListener("accountsChanged", onChange); };
   }, []);
 
-  // ── Auth helpers (for registration only) ──
+  // ── Auth helpers ──
   const sendOTP = async (email, name, referralCode) => {
     const res = await fetch(`${API}/api/user/send-otp`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, walletAddress: account || `email_${Date.now()}`, name, referralCode }),
+      body: JSON.stringify({ email, walletAddress: account || undefined, name, referralCode }),
     });
     return res.json();
   };
@@ -113,7 +92,6 @@ export function Web3Provider({ children }) {
     if (data.status === 200 && data.data?.token) {
       setToken(data.data.token); setUser(data.data.user);
       localStorage.setItem("aussivo_token", data.data.token);
-      setNeedsRegistration(false);
     }
     return data;
   };
@@ -137,23 +115,19 @@ export function Web3Provider({ children }) {
     return d;
   };
 
-  // When a logged-in user has a different wallet connected than the one on their record,
-  // auto-sync so on-chain deposits route to the right account.
+  // When a logged-in user connects a wallet that isn't yet in their account, link it silently.
+  // Any wallet the user ever connects gets appended to walletAddresses so deposits from it
+  // are attributed to this email's portfolio.
   useEffect(() => {
     if (!token || !user || !account) return;
-    const registered = (user.walletAddress || "").toLowerCase();
     const connected = account.toLowerCase();
-    if (!connected || connected === registered) return;
-    if (registered && !registered.startsWith("0x")) {
-      // Registered value is a placeholder like "email_…" — silently upgrade it
-      linkWallet(connected);
-    } else {
-      linkWallet(connected).then(d => {
-        if (d?.status === 200) toast.success(`Wallet updated to ${connected.slice(0, 6)}…${connected.slice(-4)}`);
-        else if (d?.status === 409) toast.error("This wallet is already linked to another account");
-      });
-    }
-  }, [token, user?.walletAddress, account]);
+    const known = (user.walletAddresses || []).map((w) => (w || "").toLowerCase());
+    if (known.includes(connected)) return;
+    linkWallet(connected).then(d => {
+      if (d?.status === 200) toast.success(`Linked wallet ${connected.slice(0, 6)}…${connected.slice(-4)}`);
+      else if (d?.status === 409) toast.error("This wallet is already linked to another account");
+    });
+  }, [token, user?.walletAddresses, account]);
 
   const isLoggedIn = !!(token && user);
   const short = account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "";
@@ -161,7 +135,7 @@ export function Web3Provider({ children }) {
   return (
     <Web3Ctx.Provider value={{
       account, provider, signer, chainId, token, user, short, availableWallets,
-      isLoggedIn, needsRegistration,
+      isLoggedIn,
       connectWallet, disconnect, sendOTP, verifyOTP, refreshUser, linkWallet, API,
     }}>
       {children}

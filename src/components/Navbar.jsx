@@ -12,24 +12,14 @@ const NAV = [
 ];
 
 export default function Navbar() {
-  const { account, short, disconnect, user, isLoggedIn, needsRegistration, connectWallet } = useWeb3();
+  const { account, short, disconnect, user, isLoggedIn } = useWeb3();
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
-  // Show registration modal ONLY when wallet connected but user not registered
-  useEffect(() => {
-    if (needsRegistration && !isLoggedIn) setShowAuth(true);
-    if (isLoggedIn) setShowAuth(false);
-  }, [needsRegistration, isLoggedIn]);
+  useEffect(() => { if (isLoggedIn) setShowAuth(false); }, [isLoggedIn]);
 
-  const handleConnect = async () => {
-    if (!window.ethereum) { setShowAuth(true); return; }
-    // Connect wallet — Web3Context handles the rest:
-    // If returning user → auto-login (no modal)
-    // If new user → sets needsRegistration → triggers modal above
-    await connectWallet();
-  };
+  const handleSignIn = () => setShowAuth(true);
 
   return (
     <>
@@ -78,23 +68,22 @@ export default function Navbar() {
                     <Link to="/swap" className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-surface-3 rounded-lg" onClick={() => setMenuOpen(false)}>🔄 Swap</Link>
                     <Link to="/referral" className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-surface-3 rounded-lg" onClick={() => setMenuOpen(false)}>🤝 Referrals</Link>
                     <button onClick={() => { disconnect(); setMenuOpen(false); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-surface-3 rounded-lg mt-1 border-t border-surface-4/50 pt-2">⏏ Disconnect</button>
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-surface-3 rounded-lg mt-1 border-t border-surface-4/50 pt-2">⏏ Sign out</button>
                   </div>
                 )}
               </div>
             ) : (
-              <button onClick={handleConnect} className="btn-primary text-sm flex items-center gap-2">
+              <button onClick={handleSignIn} className="btn-primary text-sm flex items-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <rect x="2" y="6" width="20" height="12" rx="2"/><path d="M22 10h-6a2 2 0 000 4h6"/>
+                  <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/>
                 </svg>
-                Connect Wallet
+                Sign in
               </button>
             )}
           </div>
         </div>
       </header>
 
-      {/* Registration modal — ONLY for new users */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
       <style>{`@keyframes modalIn { from { opacity:0; transform:scale(0.95) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
     </>

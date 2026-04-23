@@ -143,8 +143,8 @@ export default function Portfolio() {
             const isLocked = lockDate && lockDate > new Date();
             const vaultId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
             const vaultName = d.vaultId?.name || "Vault";
-            const monthlyApy = Number(d.apyPercent || 0);
-            const annualApy = (monthlyApy * 12).toFixed(1);
+            const annualApy = Number(d.poolApy ?? (d.apyPercent || 0) * 12).toFixed(1);
+            const monthlyApy = Number(d.poolApyMonthly ?? d.apyPercent ?? 0);
             return (
               <div key={i} className="glass p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">

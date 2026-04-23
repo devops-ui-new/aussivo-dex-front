@@ -22,8 +22,11 @@ export default function AdminWithdrawals() {
         method: "POST", headers: hdr(), body: JSON.stringify({ requestId: id, action, txHash: action === "approve" ? txHash : "", note })
       });
       const d = await res.json();
-      if (d.status === 200) { toast.success(`Withdrawal ${action}d`); setTxHash(""); setNote(""); load(); }
-      else toast.error(d.message);
+      if (d.status === 200) {
+        const hash = d.data?.txHash;
+        toast.success(action === "approve" && hash ? `Paid on-chain: ${hash.slice(0, 10)}…` : `Withdrawal ${action}d`);
+        setTxHash(""); setNote(""); load();
+      } else toast.error(d.message);
     } catch { toast.error("Failed"); }
     setProcessing(null);
   };
@@ -55,7 +58,7 @@ export default function AdminWithdrawals() {
               </div>
               {r.status === "pending" && (
                 <div className="space-y-2 w-72">
-                  <input value={txHash} onChange={e => setTxHash(e.target.value)} placeholder="Tx hash (after sending)" className="input-field text-xs" />
+                  <input value={txHash} onChange={e => setTxHash(e.target.value)} placeholder="Tx hash (leave blank for auto-payout)" className="input-field text-xs" />
                   <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" className="input-field text-xs" />
                   <div className="flex gap-2">
                     <button onClick={() => process(r._id, "approve")} disabled={processing === r._id}
@@ -70,7 +73,12 @@ export default function AdminWithdrawals() {
                 </div>
               )}
               {r.status !== "pending" && (
-                <span className={`tag ${r.status === "completed" ? "tag-green" : "tag-red"}`}>{r.status}</span>
+                <div className="text-right space-y-1">
+                  <span className={`tag ${r.status === "completed" ? "tag-green" : "tag-red"}`}>{r.status}</span>
+                  {r.txHash && (
+                    <div className="text-[10px] font-mono text-muted break-all max-w-[260px]">{r.txHash}</div>
+                  )}
+                </div>
               )}
             </div>
           </div>
