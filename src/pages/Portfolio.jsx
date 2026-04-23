@@ -66,6 +66,22 @@ export default function Portfolio() {
     setLoading(false);
   };
 
+  const handleRedeem = async (depositId) => {
+    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
+    if (!confirm("Redeem this deposit? Your principal will be returned to your wallet after admin approval.")) return;
+    setLoading(depositId);
+    try {
+      const res = await fetch(`${API}/api/user/withdraw`, {
+        method: "POST", headers: hdr(),
+        body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
+      });
+      const d = await res.json();
+      if (d.status === 201) { toast.success("Redemption request submitted!"); load(); }
+      else toast.error(d.message || "Failed");
+    } catch { toast.error("Failed"); }
+    setLoading(null);
+  };
+
   if (!token) return (
     <div className="max-w-4xl mx-auto px-6 py-20 text-center">
       <h2 className="font-display font-bold text-2xl mb-4">Sign In Required</h2>
@@ -148,8 +164,15 @@ export default function Portfolio() {
                 <div className="text-right">
                   {isLocked ? (
                     <LockCountdown unlockAt={d.lockUntil} />
+                  ) : d.redemptionPending ? (
+                    <span className="tag tag-yellow text-xs">Redemption Pending</span>
                   ) : (
-                    <span className="tag tag-green text-xs">Flexible</span>
+                    <button
+                      onClick={() => handleRedeem(d._id)}
+                      disabled={loading === d._id}
+                      className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
+                      {loading === d._id ? "..." : "Redeem →"}
+                    </button>
                   )}
                   <div className="text-xs text-muted mt-1">+${d.totalYieldPaid?.toFixed(2) || "0"} earned</div>
                 </div>
