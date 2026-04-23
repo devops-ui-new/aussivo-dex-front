@@ -12,14 +12,19 @@ const NAV = [
 ];
 
 export default function Navbar() {
-  const { account, short, disconnect, user, isLoggedIn } = useWeb3();
+  const { account, short, disconnect, user, isLoggedIn, connectWallet } = useWeb3();
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => { if (isLoggedIn) setShowAuth(false); }, [isLoggedIn]);
 
-  const handleSignIn = () => setShowAuth(true);
+  const handleConnect = async () => {
+    // Try to connect the wallet first; OTP modal opens regardless so we always
+    // collect email + code (no silent wallet auto-login).
+    if (window.ethereum) await connectWallet();
+    setShowAuth(true);
+  };
 
   return (
     <>
@@ -73,11 +78,11 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <button onClick={handleSignIn} className="btn-primary text-sm flex items-center gap-2">
+              <button onClick={handleConnect} className="btn-primary text-sm flex items-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/>
+                  <rect x="2" y="6" width="20" height="12" rx="2"/><path d="M22 10h-6a2 2 0 000 4h6"/>
                 </svg>
-                Sign in
+                Connect Wallet
               </button>
             )}
           </div>

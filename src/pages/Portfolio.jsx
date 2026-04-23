@@ -60,7 +60,7 @@ export default function Portfolio() {
         body: JSON.stringify({ amount, asset, source, walletAddress: user.walletAddress }),
       });
       const d = await res.json();
-      if (d.status === 201) { toast.success("Withdrawal request submitted!"); load(); }
+      if (d.status === 201) { toast.success("Withdrawal submitted — processing on-chain"); load(); }
       else toast.error(d.message);
     } catch { toast.error("Failed"); }
     setLoading(false);
@@ -68,7 +68,7 @@ export default function Portfolio() {
 
   const handleRedeem = async (depositId) => {
     if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
-    if (!confirm("Redeem this deposit? Your principal will be returned to your wallet after admin approval.")) return;
+    if (!confirm("Redeem this deposit? Your principal will be returned to your wallet once the redemption is processed on-chain.")) return;
     setLoading(depositId);
     try {
       const res = await fetch(`${API}/api/user/withdraw`, {
@@ -76,7 +76,7 @@ export default function Portfolio() {
         body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
       });
       const d = await res.json();
-      if (d.status === 201) { toast.success("Redemption request submitted!"); load(); }
+      if (d.status === 201) { toast.success("Redemption submitted — processing on-chain"); load(); }
       else toast.error(d.message || "Failed");
     } catch { toast.error("Failed"); }
     setLoading(null);

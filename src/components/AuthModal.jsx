@@ -3,12 +3,13 @@ import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
 /**
- * Sign-in modal. Every sign-in goes through email + OTP — we never silently re-auth
- * the session based on a connected wallet. Wallets are linked to the account after
- * sign-in (each wallet the user connects is appended to their walletAddresses list).
+ * Sign-in modal. User connects a wallet first (from the Navbar), then this modal
+ * always collects email + OTP — we never silently re-auth based on the connected
+ * wallet. The connected wallet is linked to the account automatically after sign-in.
+ * Multiple wallets can be linked to one email.
  */
 export default function AuthModal({ onClose }) {
-  const { sendOTP, verifyOTP } = useWeb3();
+  const { account, short, sendOTP, verifyOTP } = useWeb3();
   const [step, setStep] = useState("register"); // register → otp
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -68,6 +69,16 @@ export default function AuthModal({ onClose }) {
         <div className="p-5">
           {step === "register" && (
             <div className="space-y-4">
+              {account && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-brand/5 border border-brand/15">
+                  <div className="pulse-dot" />
+                  <div>
+                    <div className="text-xs text-muted">Wallet Connected</div>
+                    <div className="text-sm font-mono text-brand">{short}</div>
+                  </div>
+                  <span className="ml-auto text-xs text-brand bg-brand/10 px-2 py-0.5 rounded-full">✓ Connected</span>
+                </div>
+              )}
               <div>
                 <label className="text-sm text-muted mb-1.5 block">Email Address *</label>
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="input-field" autoFocus />
