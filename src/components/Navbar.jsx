@@ -3,11 +3,11 @@ import { useWeb3 } from "../context/Web3Context";
 import { useState, useEffect } from "react";
 import AuthModal from "./AuthModal";
 import toast from "react-hot-toast";
+import brandLogo from "../assets/branding/logo-aussivo.png";
 
 const NAV = [
   { to: "/", label: "Home" },
   { to: "/pools", label: "Earn" },
-  { to: "/swap", label: "Swap" },
   { to: "/portfolio", label: "Portfolio" },
   { to: "/referral", label: "Referral" },
 ];
@@ -42,24 +42,17 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="relative z-50 border-b border-surface-3/60">
-        <div className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center group-hover:bg-brand/20 transition-all">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="2.5">
-                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-                <line x1="12" y1="22" x2="12" y2="15.5" />
-                <polyline points="22 8.5 12 15.5 2 8.5" />
-              </svg>
-            </div>
-            <span className="font-display font-bold text-lg tracking-tight">Aussivo<span className="text-brand">.DEX</span></span>
+      <header className="relative z-50">
+        <div className="max-w-7xl mx-auto px-6 h-[74px] flex items-center justify-between">
+          <Link to="/" className="group">
+            <img src={brandLogo} alt="Aussivo.DEX" className="h-8 w-auto" />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-16">
             {NAV.map(n => (
               <Link key={n.to} to={n.to}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === n.to ? "text-brand bg-brand/8" : "text-slate-400 hover:text-slate-200 hover:bg-surface-3/50"
+                className={`text-sm font-medium transition-colors ${
+                  pathname === n.to ? "text-white" : "text-slate-300 hover:text-white"
                 }`}>{n.label}</Link>
             ))}
           </nav>
@@ -92,10 +85,7 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <button onClick={handleConnect} className="btn-primary text-sm flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <rect x="2" y="6" width="20" height="12" rx="2"/><path d="M22 10h-6a2 2 0 000 4h6"/>
-                </svg>
+              <button onClick={handleConnect} className="btn-primary !rounded-full !px-6 !py-2.5 !text-[0.8rem] !font-semibold tracking-wide">
                 Connect Wallet
               </button>
             )}

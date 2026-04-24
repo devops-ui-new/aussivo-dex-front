@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import StatsBar from "../components/StatsBar";
 import PoolCard from "../components/PoolCard";
+import heroPlatform from "../assets/home/airdrops_v4 1.png";
+import referralIllustration from "../assets/home/referral-illustration.png";
 
 export default function Home() {
   const [pools, setPools] = useState([]);
@@ -12,58 +14,58 @@ export default function Home() {
   }, []);
 
   const topPools = pools.filter(p => p.active).slice(0, 3);
+  const howItWorksSteps = [
+    { step: "1", title: "Connect Wallet" },
+    { step: "2", title: "Choose A Vault" },
+    { step: "3", title: "Earn Yield" },
+  ];
 
   return (
     <div>
-      <section className="relative overflow-hidden">
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full opacity-20 blur-[120px]"
-          style={{ background: "radial-gradient(circle, rgba(0,230,118,0.15) 0%, transparent 70%)" }} />
-        <div className="absolute top-40 right-10 w-2 h-2 rounded-full bg-brand/40 animate-pulse" />
-        <div className="absolute top-60 left-20 w-1.5 h-1.5 rounded-full bg-brand/30 animate-pulse" style={{ animationDelay: "1s" }} />
+      <section className="relative -mt-[82px] pt-[82px] overflow-hidden border-b border-surface-3/40">
+        <div className="absolute inset-y-0 right-0 w-[60%] pointer-events-none">
+          <img
+            src={heroPlatform}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover object-[65%_78%]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#060b18]/70 via-transparent to-transparent" />
+        </div>
 
-        <div className="max-w-7xl mx-auto px-6 pt-24 pb-20">
-          <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center gap-2 bg-brand/5 border border-brand/15 rounded-full px-4 py-1.5 mb-8">
-              <div className="pulse-dot" style={{ width: 6, height: 6 }} />
-              <span className="text-xs font-medium text-brand/80 tracking-wide">PROTOCOL LIVE ON BSC</span>
-            </div>
+        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[760px] h-[260px] rounded-full opacity-30 blur-[100px]"
+          style={{ background: "radial-gradient(circle, rgba(0,230,118,0.2) 0%, transparent 75%)" }} />
 
-            <h1 className="font-display font-extrabold text-5xl md:text-6xl lg:text-7xl leading-[1.08] tracking-tight mb-6">
-              Earn Yield on{" "}
-              <span className="text-gradient">Stablecoins</span>
-              <br />
-              <span className="text-slate-400 text-4xl md:text-5xl lg:text-[3.5rem] font-bold">Without the Complexity</span>
-            </h1>
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-10 pb-14 lg:pt-12 lg:pb-16">
+          <div className="grid lg:grid-cols-[1.15fr_1fr] gap-10 items-center">
+            <div>
+              <h1 className="font-display font-semibold text-3xl md:text-4xl lg:text-5xl leading-[1.12] tracking-tight mb-5">
+                <span className="block text-slate-100">Earn Yield on</span>
+                <span className="block text-gradient">Stablecoins</span>
+                <span className="block text-slate-100">Without the Complexity</span>
+              </h1>
 
-            <p className="text-lg text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed">
-              Deposit USDC or USDT into audited vaults. Earn up to 18% APY from
-              institutional-grade strategies. Fully on-chain. Fully transparent.
-            </p>
+              <p className="text-sm md:text-base text-slate-400 max-w-xl mb-8 leading-relaxed">
+                Deposit USDC or USDT into audited vaults. Earn up to 18% APY from institutional-grade strategies.
+                Fully on-chain. Fully transparent.
+              </p>
 
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <Link to="/pools" className="btn-primary text-base px-8 py-3.5">Start Earning</Link>
-              <a href="#how-it-works" className="btn-secondary text-base px-8 py-3.5">How It Works</a>
-            </div>
-
-            <div className="flex items-center justify-center gap-8 mt-12 text-xs text-muted">
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <span>Audited Contracts</span>
+              <div className="flex flex-wrap items-center gap-3 mb-8">
+                <Link to="/pools" className="btn-primary text-sm md:text-base px-7 py-3">Start Earning</Link>
+                <a href="#how-it-works" className="btn-secondary text-sm md:text-base px-7 py-3">How It Works</a>
               </div>
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                <span>Non-Custodial</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                <span>Real-Time Rewards</span>
+
+              <div className="flex flex-wrap items-center gap-4 md:gap-6 text-[11px] text-muted tracking-wide">
+                <span>•Audited Contracts</span>
+                <span>•Non-custodial</span>
+                <span>•Real Time Rewards</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 -mt-4 mb-16"><StatsBar /></section>
+      <section className="max-w-7xl mx-auto px-6 py-10"><StatsBar /></section>
 
       <section className="max-w-7xl mx-auto px-6 mb-20">
         <div className="flex items-center justify-between mb-8">
@@ -79,35 +81,39 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="max-w-7xl mx-auto px-6 mb-20">
-        <div className="text-center mb-12">
+      <section id="how-it-works" className="max-w-7xl mx-auto px-6 mb-24">
+        <div className="text-center mb-10">
           <h2 className="font-display font-bold text-3xl mb-3">How It Works</h2>
           <p className="text-muted max-w-lg mx-auto">Three steps to start earning yield on your stablecoins</p>
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {[
-            { step: "01", title: "Connect Wallet", desc: "Link MetaMask or WalletConnect. No registration, fully permissionless." },
-            { step: "02", title: "Choose a Vault", desc: "Compare APY rates, lock periods, and risk profiles across vaults." },
-            { step: "03", title: "Earn Yield", desc: "Deposit USDC or USDT. Watch rewards accrue in real-time." },
-          ].map((item, i) => (
-            <div key={i} className="glass p-7 text-center">
-              <div className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-brand/8 border border-brand/15 flex items-center justify-center">
-                <span className="font-display font-bold text-brand text-lg">{item.step}</span>
+        <div className="relative grid md:grid-cols-3 gap-6 md:gap-12 lg:gap-20 max-w-5xl mx-auto">
+          <div className="hidden md:block absolute top-[84px] left-[22%] right-[22%] h-px bg-brand/40" />
+          {howItWorksSteps.map((item) => (
+            <div key={item.step} className="relative flex items-center justify-center">
+              <div className="w-[170px] h-[170px] rounded-full border border-brand/40 bg-[radial-gradient(circle_at_20%_50%,rgba(0,230,118,0.08),rgba(0,0,0,0.08))] flex flex-col items-center justify-center">
+                <div className="w-11 h-11 rounded-full bg-brand/25 text-brand font-display font-bold flex items-center justify-center mb-3">
+                  {item.step}
+                </div>
+                <h3 className="font-display font-medium text-2xl leading-[1.15] max-w-[110px]">{item.title}</h3>
               </div>
-              <h3 className="font-display font-semibold text-lg mb-2">{item.title}</h3>
-              <p className="text-sm text-muted leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       <section className="max-w-7xl mx-auto px-6 mb-16">
-        <div className="glass p-8 text-center glow-green" style={{ background: "linear-gradient(135deg, rgba(0,230,118,0.06) 0%, rgba(11,17,33,0.95) 100%)" }}>
-          <h2 className="font-display font-bold text-2xl mb-3">Earn More with Referrals</h2>
-          <p className="text-muted text-sm max-w-md mx-auto mb-6">
-            Share your link and earn 5-8% L1 + 2-3% L2 commissions from protocol fees.
-          </p>
-          <Link to="/referral" className="btn-primary inline-block">Get Referral Link →</Link>
+        <div className="glass p-6 md:p-8 glow-green border-brand/35"
+          style={{ background: "linear-gradient(90deg, rgba(2,23,13,0.96) 0%, rgba(5,49,28,0.92) 45%, rgba(10,16,28,0.92) 100%)" }}>
+          <div className="grid md:grid-cols-[1fr_280px] gap-8 items-center">
+            <div>
+              <h2 className="font-display font-bold text-4xl md:text-5xl leading-tight mb-4">Earn More with Referrals</h2>
+              <p className="text-slate-300 text-base max-w-lg mb-6">
+                Share your link and earn 5% to 8% L1 + 2% to 3% L2 commissions from protocol fees.
+              </p>
+              <Link to="/referral" className="btn-primary inline-block">Get Referral Link</Link>
+            </div>
+            <img src={referralIllustration} alt="Referral rewards" className="w-full max-w-[280px] justify-self-center" />
+          </div>
         </div>
       </section>
     </div>
