@@ -68,16 +68,19 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-6 py-10"><StatsBar /></section>
 
       <section className="max-w-7xl mx-auto px-6 mb-20">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="font-display font-bold text-2xl mb-1">Top Vaults</h2>
-            <p className="text-sm text-muted">Curated yield strategies, on-chain and verifiable</p>
+        <div className="relative mb-8">
+          <div className="text-center">
+            <h2 className="font-display font-bold text-3xl text-slate-100 mb-2">Top Vaults</h2>
+            <p className="text-muted max-w-lg mx-auto">Curated yield strategies, on-chain and verifiable</p>
           </div>
-          <Link to="/pools" className="btn-secondary text-sm py-2.5 px-5">View All →</Link>
+          <Link to="/pools" className="btn-primary !text-sm !py-2 !px-4 absolute right-0 top-1/2 -translate-y-1/2 hidden md:inline-flex">View All →</Link>
+        </div>
+        <div className="flex justify-center mb-5 md:hidden">
+          <Link to="/pools" className="btn-primary !text-sm !py-2 !px-4">View All →</Link>
         </div>
         <div className="grid md:grid-cols-3 gap-5">
-          {topPools.map(pool => <PoolCard key={pool.id} pool={pool} />)}
-          {topPools.length === 0 && [0,1,2].map(i => <div key={i} className="glass p-6 h-[240px] shimmer" />)}
+          {topPools.map(pool => <PoolCard key={pool.id} pool={pool} variant="home-dark" />)}
+          {topPools.length === 0 && [0,1,2].map(i => <div key={i} className="glass p-6 h-[320px] shimmer" />)}
         </div>
       </section>
 
@@ -102,17 +105,28 @@ export default function Home() {
       </section>
 
       <section className="max-w-7xl mx-auto px-6 mb-16">
-        <div className="glass p-6 md:p-8 glow-green border-brand/35"
-          style={{ background: "linear-gradient(90deg, rgba(2,23,13,0.96) 0%, rgba(5,49,28,0.92) 45%, rgba(10,16,28,0.92) 100%)" }}>
-          <div className="grid md:grid-cols-[1fr_280px] gap-8 items-center">
-            <div>
-              <h2 className="font-display font-bold text-4xl md:text-5xl leading-tight mb-4">Earn More with Referrals</h2>
+        <div
+          className="relative overflow-hidden rounded-2xl border border-brand/55 shadow-[0_0_18px_rgba(0,230,118,0.4),0_0_48px_rgba(0,230,118,0.18)]"
+          style={{ background: "linear-gradient(90deg, rgba(1,12,8,0.98) 0%, rgba(2,10,8,0.98) 52%, rgba(10,16,28,0.92) 100%)" }}
+        >
+          <div className="absolute left-0 top-0 h-full w-[62%] bg-[radial-gradient(circle_at_35%_50%,rgba(0,230,118,0.32)_0%,rgba(0,230,118,0.12)_38%,rgba(0,0,0,0)_78%)] pointer-events-none z-0" />
+          <div className="relative z-10 grid md:grid-cols-[1fr_260px] gap-8 items-center p-5 md:p-7">
+            <div className="md:ml-[50px]">
+              <h2 className="font-display font-bold text-4xl md:text-5xl leading-tight mb-4">
+                Earn More with
+                <br />
+                Referrals
+              </h2>
               <p className="text-slate-300 text-base max-w-lg mb-6">
-                Share your link and earn 5% to 8% L1 + 2% to 3% L2 commissions from protocol fees.
+                Share your link and earn 5% to 8% L1 + 2% to 3% L2
+                <br />
+                commissions from protocol fees.
               </p>
               <Link to="/referral" className="btn-primary inline-block">Get Referral Link</Link>
             </div>
-            <img src={referralIllustration} alt="Referral rewards" className="w-full max-w-[280px] justify-self-center" />
+            <div className="justify-self-center md:justify-self-end">
+              <img src={referralIllustration} alt="Referral rewards" className="w-full max-w-[260px]" />
+            </div>
           </div>
         </div>
       </section>
