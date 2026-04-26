@@ -25,9 +25,17 @@ const RPC_BY_CHAIN = {
   ],
 };
 
-const readProvider = (chainId) => {
-  const rpcs = RPC_BY_CHAIN[Number(chainId)] || RPC_BY_CHAIN[97];
-  return new ethers.JsonRpcProvider(rpcs[0], Number(chainId));
+/** Official BSC USDT/USDC use 18 decimals. Skip on-chain `decimals()` to avoid empty RPC + BUFFER_OVERRUN. */
+const CANONICAL_BSC_STABLE_DECIMALS = {
+  "0x55d398326f99059ff775485246999027b3197955": 18,
+  "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": 18,
+  "0x337610d27c682e347c9cd60bd4b3b107c9d34dd": 18,
+  "0x64544969ed7ebbf5f083679233325356ebe738930": 18,
+};
+
+const getCanonicalBscStableDecimals = (addr) => {
+  if (!addr) return null;
+  return CANONICAL_BSC_STABLE_DECIMALS[addr.toLowerCase()] ?? null;
 };
 
 const STRATEGIES = {
@@ -187,10 +195,12 @@ export default function PoolDetail() {
       activeSigner = await freshProvider.getSigner();
 
       const senderAddr = await activeSigner.getAddress();
-      const readRpc = readProvider(qrData.chainId);
-      const erc20Read = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, readRpc);
+      // Read balances/decimals from the *wallet* provider (not a public BSC url). Public RPCs
+      // often return empty `0x` for view calls, which makes ethers v6 throw BUFFER_OVERRUN.
+      const erc20Read = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, freshProvider);
+      const canonicalDec = getCanonicalBscStableDecimals(qrData.tokenAddress);
       const [decimalsRaw, symbolRaw, balance] = await Promise.all([
-        erc20Read.decimals().catch(() => 18),
+        canonicalDec != null ? Promise.resolve(canonicalDec) : erc20Read.decimals().catch(() => 18),
         erc20Read.symbol().catch(() => qrData.asset),
         erc20Read.balanceOf(senderAddr).catch(() => 0n),
       ]);
@@ -219,9 +229,13 @@ export default function PoolDetail() {
       toast.success("Payment confirmed! Deposit will appear in your portfolio shortly.", { id: "pay" });
     } catch (err) {
       const raw = err?.shortMessage || err?.reason || err?.data?.message || err?.message || "Transaction failed";
-      const friendly = /transfer amount exceeds balance/i.test(raw)
-        ? `Insufficient token balance on ${Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet"}. Make sure the wallet holds ${qrData.asset} on the correct network.`
-        : raw;
+      const isDecode =
+        /cannot slice beyond data bounds|BUFFER_OVERRUN/i.test(String(raw)) || err?.code === "BUFFER_OVERRUN";
+      const friendly = isDecode
+        ? "RPC returned bad data. Switch MetaMask to BSC, try again, or set a custom BSC network RPC in your wallet (see docs.binance.com for stable endpoints)."
+        : /transfer amount exceeds balance/i.test(raw)
+          ? `Insufficient token balance on ${Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet"}. Make sure the wallet holds ${qrData.asset} on the correct network.`
+          : raw;
       toast.error(friendly, { id: "pay", duration: 8000 });
     }
     setPaying(false);
