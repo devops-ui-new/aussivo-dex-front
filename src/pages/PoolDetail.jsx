@@ -5,12 +5,15 @@ import { useWeb3 } from "../context/Web3Context";
 import { ethers } from "ethers";
 import toast from "react-hot-toast";
 
-const ERC20_ABI = [
+// Read: full ERC-20. Write: `transfer` without a return so estimation/signing is compatible with
+// BEP-20 that do not return data the same way as OpenZeppelin.
+const ERC20_READ_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
   "function decimals() view returns (uint8)",
   "function balanceOf(address owner) view returns (uint256)",
   "function symbol() view returns (string)",
 ];
+const ERC20_TRANSFER_NO_RET = ["function transfer(address to, uint256 amount)"];
 
 const RPC_BY_CHAIN = {
   56: [
@@ -195,9 +198,17 @@ export default function PoolDetail() {
       activeSigner = await freshProvider.getSigner();
 
       const senderAddr = await activeSigner.getAddress();
+      const tokenAddr = ethers.getAddress(qrData.tokenAddress);
+      const toAddr = ethers.getAddress(qrData.depositAddress);
+      if (toAddr === ethers.ZeroAddress) {
+        toast.error("Invalid deposit address. Regenerate the deposit from this page.");
+        setPaying(false);
+        return;
+      }
+
       // Read balances/decimals from the *wallet* provider (not a public BSC url). Public RPCs
       // often return empty `0x` for view calls, which makes ethers v6 throw BUFFER_OVERRUN.
-      const erc20Read = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, freshProvider);
+      const erc20Read = new ethers.Contract(tokenAddr, ERC20_READ_ABI, freshProvider);
       const canonicalDec = getCanonicalBscStableDecimals(qrData.tokenAddress);
       const [decimalsRaw, symbolRaw, balance] = await Promise.all([
         canonicalDec != null ? Promise.resolve(canonicalDec) : erc20Read.decimals().catch(() => 18),
@@ -205,8 +216,20 @@ export default function PoolDetail() {
         erc20Read.balanceOf(senderAddr).catch(() => 0n),
       ]);
       const decimals = Number(decimalsRaw);
-      const value = ethers.parseUnits(String(qrData.amount), decimals);
-      const erc20 = new ethers.Contract(qrData.tokenAddress, ERC20_ABI, activeSigner);
+      const hasServerWei =
+        qrData.amountInBaseUnits != null && String(qrData.amountInBaseUnits).trim() !== "";
+      const value = hasServerWei
+        ? BigInt(String(qrData.amountInBaseUnits).trim())
+        : ethers.parseUnits(String(qrData.amount), decimals);
+
+      const bnb = await freshProvider.getBalance(senderAddr);
+      if (bnb === 0n) {
+        toast.error("You need a small amount of BNB in this wallet to pay for gas. Add BSC BNB, then try again.");
+        setPaying(false);
+        return;
+      }
+
+      const erc20Write = new ethers.Contract(tokenAddr, ERC20_TRANSFER_NO_RET, activeSigner);
       if (balance < value) {
         const have = Number(ethers.formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 });
         const networkLabel = Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet";
@@ -222,7 +245,7 @@ export default function PoolDetail() {
       }
 
       toast.loading("Confirm in your wallet...", { id: "pay" });
-      const tx = await erc20.transfer(qrData.depositAddress, value);
+      const tx = await erc20Write.transfer(toAddr, value, { gasLimit: 200_000n });
       toast.loading("Waiting for confirmation...", { id: "pay" });
       setTxHash(tx.hash);
       await tx.wait(1);
@@ -231,8 +254,13 @@ export default function PoolDetail() {
       const raw = err?.shortMessage || err?.reason || err?.data?.message || err?.message || "Transaction failed";
       const isDecode =
         /cannot slice beyond data bounds|BUFFER_OVERRUN/i.test(String(raw)) || err?.code === "BUFFER_OVERRUN";
+      const isMissingRevert = /missing revert data/i.test(String(raw));
       const friendly = isDecode
         ? "RPC returned bad data. Switch MetaMask to BSC, try again, or set a custom BSC network RPC in your wallet (see docs.binance.com for stable endpoints)."
+        : isMissingRevert
+          ? `The transfer can’t be completed (the chain rejected the transfer). ` +
+            `On BSC you need enough ${qrData?.asset || "USDT"} for this amount, and some BNB for network fees. ` +
+            `Confirm you’re on ${Number(qrData?.chainId) === 56 ? "BSC mainnet" : "BSC testnet"} and the token contract matches your wallet.`
         : /transfer amount exceeds balance/i.test(raw)
           ? `Insufficient token balance on ${Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet"}. Make sure the wallet holds ${qrData.asset} on the correct network.`
           : raw;

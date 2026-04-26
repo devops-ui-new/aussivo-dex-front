@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
@@ -9,6 +10,7 @@ import toast from "react-hot-toast";
  * Multiple wallets can be linked to one email.
  */
 export default function AuthModal({ onClose }) {
+  const navigate = useNavigate();
   const { account, short, sendOTP, verifyOTP } = useWeb3();
   const [step, setStep] = useState("register"); // register → otp
   const [email, setEmail] = useState("");
@@ -39,8 +41,11 @@ export default function AuthModal({ onClose }) {
     setLoading(true);
     try {
       const res = await verifyOTP(email, otp);
-      if (res.status === 200) { toast.success("Welcome to Aussivo.DEX!"); onClose(); }
-      else toast.error(res.message);
+      if (res.status === 200) {
+        toast.success("Welcome to Aussivo.DEX!");
+        onClose();
+        navigate("/portfolio", { replace: true });
+      } else toast.error(res.message);
     } catch { toast.error("Verification failed"); }
     setLoading(false);
   };
