@@ -25,12 +25,12 @@ export default function Pools() {
   });
 
   if (sort === "apy") filtered.sort((a, b) => parseFloat(b.apy || 0) - parseFloat(a.apy || 0));
-  if (sort === "tvl") filtered.sort((a, b) => Number(b.total_staked) - Number(a.total_staked));
+  if (sort === "tvl") filtered.sort((a, b) => Number(b.total_staked ?? b.totalStaked ?? 0) - Number(a.total_staked ?? a.totalStaked ?? 0));
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
       <h1 className="font-display font-bold text-3xl text-white mb-2">Yield Vaults</h1>
-      <p className="text-gray-500 mb-8 max-w-xl">
+      <p className="text-slate-400 mb-8 max-w-xl">
         Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
       </p>
 
@@ -41,14 +41,14 @@ export default function Pools() {
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
           </svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vaults..."
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" />
+            className="w-full bg-[#0d1324] border border-surface-4/50 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/10" />
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-6 mb-6 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm text-gray-500 font-medium">Filter By:</span>
+          <span className="text-sm text-slate-400 font-medium">Filter By:</span>
           {[
             { key: "all", label: "All" },
             { key: "top", label: "Top Gainers" },
@@ -59,7 +59,7 @@ export default function Pools() {
           ].map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
               className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${
-                filter === f.key ? "bg-brand text-white border-brand" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                filter === f.key ? "bg-brand text-[#060b18] border-brand" : "bg-[#0d1324] text-slate-300 border-surface-4/50 hover:border-brand/40"
               }`}>
               {f.label}
             </button>
@@ -67,14 +67,14 @@ export default function Pools() {
         </div>
 
         <div className="flex items-center gap-1.5 ml-auto">
-          <span className="text-sm text-gray-500 font-medium">Sort By:</span>
+          <span className="text-sm text-slate-400 font-medium">Sort By:</span>
           {[
             { key: "popularity", label: "Popularity" },
             { key: "apy", label: "APY" },
             { key: "tvl", label: "TVL" },
           ].map(s => (
             <button key={s.key} onClick={() => setSort(s.key)}
-              className={`text-sm font-medium px-2 py-1 ${sort === s.key ? "text-brand-dark font-bold" : "text-gray-400 hover:text-gray-600"}`}>
+              className={`text-sm font-medium px-2 py-1 ${sort === s.key ? "text-brand font-bold" : "text-slate-500 hover:text-slate-300"}`}>
               {s.label}
             </button>
           ))}
@@ -83,11 +83,11 @@ export default function Pools() {
 
       {/* Grid */}
       <div className="grid md:grid-cols-2 gap-5">
-        {filtered.map(pool => <PoolCard key={pool.id} pool={pool} />)}
+        {filtered.map(pool => <PoolCard key={pool.id} pool={pool} variant="home-dark" />)}
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-slate-500">
           <p className="text-lg mb-2">No vaults found</p>
           <p className="text-sm">Try adjusting your filters</p>
         </div>
