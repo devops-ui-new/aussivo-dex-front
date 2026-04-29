@@ -115,7 +115,6 @@ export default function AuthModal({ onClose }) {
               <div>
                 <input type="text" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000" className="input-field text-center text-2xl font-display font-bold tracking-[12px]" maxLength={6} autoFocus />
-                <p className="text-[11px] text-muted mt-1.5 text-center">Dev mode: use code <strong className="text-brand">123456</strong></p>
               </div>
               <button onClick={handleVerifyOTP} disabled={loading || otp.length !== 6} className="btn-primary w-full py-3.5 disabled:opacity-50">
                 {loading ? "Verifying..." : "Verify & sign in"}
