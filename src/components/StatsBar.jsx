@@ -23,7 +23,7 @@ export default function StatsBar() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {items.map((item, i) => (
-        <div key={i} className="glass px-5 py-4">
+        <div key={i} className="stats-card px-5 py-4">
           <div className="text-xs text-muted mb-1.5 font-medium uppercase tracking-wider">{item.label}</div>
           <div className="text-xl font-display font-bold">{item.value}</div>
         </div>

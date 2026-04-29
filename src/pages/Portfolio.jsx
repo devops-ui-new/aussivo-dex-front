@@ -32,6 +32,7 @@ export default function Portfolio() {
   const [deposits, setDeposits] = useState([]);
   const [yieldLogs, setYieldLogs] = useState([]);
   const [loading, setLoading] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const hdr = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
 
@@ -82,6 +83,33 @@ export default function Portfolio() {
     setLoading(null);
   };
 
+  const handleRedeemAll = async (depositIds) => {
+    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
+    if (!depositIds?.length) return;
+    if (!confirm(`Redeem all ${depositIds.length} redeemable deposits? Your principal will be returned to your wallet once processed on-chain.`)) return;
+    setBulkLoading(true);
+    try {
+      let ok = 0;
+      let skipped = 0;
+      for (const depositId of depositIds) {
+        const res = await fetch(`${API}/api/user/withdraw`, {
+          method: "POST",
+          headers: hdr(),
+          body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
+        });
+        const d = await res.json();
+        if (d?.status === 201) ok++;
+        else skipped++;
+      }
+      toast.success(`Submitted ${ok} redemption${ok === 1 ? "" : "s"}${skipped ? ` (${skipped} already pending/unavailable)` : ""}`);
+      load();
+    } catch {
+      toast.error("Failed to redeem all");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   if (!token) return (
     <div className="max-w-4xl mx-auto px-6 py-20 text-center">
       <h2 className="font-display font-bold text-2xl mb-4">Sign In Required</h2>
@@ -90,7 +118,13 @@ export default function Portfolio() {
   );
 
   const activeDeposits = deposits.filter(d => d.status === "active");
+  const nowTs = Date.now();
   const totalStaked = activeDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const redeemableDeposits = activeDeposits.filter((d) => {
+    const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
+    const isLocked = lockDate && lockDate.getTime() > nowTs;
+    return !isLocked && !d.redemptionPending;
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
@@ -130,7 +164,18 @@ export default function Portfolio() {
       </div>
 
       {/* Active Deposits */}
-      <h2 className="font-display font-semibold text-xl mb-4">Active Deposits ({activeDeposits.length})</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-semibold text-xl">Active Deposits ({activeDeposits.length})</h2>
+        {redeemableDeposits.length > 0 && (
+          <button
+            onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
+            disabled={bulkLoading}
+            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50"
+          >
+            {bulkLoading ? "Redeeming..." : "Redeem all →"}
+          </button>
+        )}
+      </div>
       {activeDeposits.length === 0 ? (
         <div className="glass p-10 text-center">
           <p className="text-muted mb-4">No active deposits yet.</p>
@@ -145,6 +190,20 @@ export default function Portfolio() {
             const vaultName = d.vaultId?.name || "Vault";
             const annualApy = Number(d.poolApy ?? (d.apyPercent || 0) * 12).toFixed(1);
             const monthlyApy = Number(d.poolApyMonthly ?? d.apyPercent ?? 0);
+            const createdAt = d.createdAt ? new Date(d.createdAt) : null;
+            const hoursElapsed = createdAt ? (nowTs - createdAt.getTime()) / 3600000 : 0;
+            // `apyPercent` on the deposit is the monthly APY percent (used by the backend monthly cron).
+            // We linearly accrue the same monthly yield across hours for a smoother "generated till now" UX.
+            const apyMonthlyPercent = Number(d.apyPercent || 0);
+            const amountNum = Number(d.amount || 0);
+            const hoursPerMonth = 30 * 24;
+            const monthlyYield = amountNum * apyMonthlyPercent / 100; // approx amount paid per "month" used by backend cron
+            const estYieldGenerated = hoursElapsed > 0 ? monthlyYield * (hoursElapsed / hoursPerMonth) : 0;
+            const maxEstYieldGenerated = monthlyYield * (Number(d.maxYieldPayments || 0));
+            const estYieldGeneratedCapped = d.maxYieldPayments
+              ? Math.min(estYieldGenerated, maxEstYieldGenerated)
+              : estYieldGenerated;
+            const estYieldPerHour = hoursPerMonth > 0 ? (monthlyYield / hoursPerMonth) : 0;
             return (
               <div key={i} className="glass p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -169,12 +228,26 @@ export default function Portfolio() {
                   ) : (
                     <button
                       onClick={() => handleRedeem(d._id)}
-                      disabled={loading === d._id}
+                      disabled={loading === d._id || bulkLoading}
                       className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
                       {loading === d._id ? "..." : "Redeem →"}
                     </button>
                   )}
-                  <div className="text-xs text-muted mt-1">+${d.totalYieldPaid?.toFixed(2) || "0"} earned</div>
+                  <div className="text-xs text-muted mt-1">
+                    +${estYieldGeneratedCapped.toFixed(6)} earned
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5">
+                    Paid so far: +${Number(d.totalYieldPaid || 0).toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5">
+                    {hoursElapsed > 0 && apyMonthlyPercent > 0 && amountNum > 0 ? (
+                      <>
+                        Generated (est.): +${estYieldGeneratedCapped.toFixed(6)} · ≈ ${estYieldPerHour.toFixed(8)}/hr
+                      </>
+                    ) : (
+                      <>Generated (est.): —</>
+                    )}
+                  </div>
                 </div>
               </div>
             );

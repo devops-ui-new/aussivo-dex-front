@@ -15,22 +15,25 @@ export default function Home() {
 
   const topPools = pools.filter(p => p.active).slice(0, 3);
   const howItWorksSteps = [
-    { step: "1", title: "Connect Wallet" },
-    { step: "2", title: "Choose A Vault" },
-    { step: "3", title: "Earn Yield" },
+    { step: "1", line1: "Connect", line2: "Wallet" },
+    { step: "2", line1: "Choose A", line2: "Vault" },
+    { step: "3", line1: "Earn", line2: "Yield" },
   ];
 
   return (
     <div>
       <section className="relative -mt-[82px] pt-[82px] overflow-hidden border-b border-surface-3/40">
-        <div className="absolute inset-y-0 right-0 w-[60%] pointer-events-none">
+        <div className="absolute inset-y-0 right-0 w-[65%] pointer-events-none">
           <img
             src={heroPlatform}
             alt=""
             aria-hidden="true"
             className="h-full w-full object-cover object-[65%_78%]"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#060b18]/70 via-transparent to-transparent" />
+          {/* Bridge gradient to match the darker grid background on the left. */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#060b18]/95 via-[#060b18]/35 to-transparent" />
+          {/* Extra edge smoothing where the hero image begins. */}
+          <div className="absolute left-0 top-0 bottom-0 w-[35%] bg-gradient-to-r from-[#060b18]/80 via-[#060b18]/35 to-transparent" />
         </div>
 
         <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[760px] h-[260px] rounded-full opacity-30 blur-[100px]"
@@ -90,14 +93,49 @@ export default function Home() {
           <p className="text-muted max-w-lg mx-auto">Three steps to start earning yield on your stablecoins</p>
         </div>
         <div className="relative grid md:grid-cols-3 gap-6 md:gap-12 lg:gap-20 max-w-5xl mx-auto">
-          <div className="hidden md:block absolute top-[84px] left-[22%] right-[22%] h-px bg-brand/40" />
+          {/* connector lines between circles */}
+          <div className="hidden md:block absolute top-[84px] left-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
+          <div className="hidden md:block absolute top-[84px] right-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
+          {/* glow highlight based on provided spec (72.2869px square, 0deg) */}
+          <div
+            className="hidden md:block absolute pointer-events-none"
+            style={{
+              width: "72.28699493408203px",
+              height: "72.28699493408203px",
+              top: "60.63px",
+              left: "94.44px",
+              opacity: 1,
+              background:
+                "linear-gradient(90deg, rgba(15,23,42,0) 0%, rgba(0,230,118,0.85) 50%, rgba(15,23,42,0) 100%)",
+              filter: "blur(16px)",
+            }}
+          />
+          <div
+            className="hidden md:block absolute pointer-events-none"
+            style={{
+              width: "72.28699493408203px",
+              height: "72.28699493408203px",
+              top: "60.63px",
+              right: "94.44px",
+              opacity: 1,
+              background:
+                "linear-gradient(90deg, rgba(15,23,42,0) 0%, rgba(0,230,118,0.85) 50%, rgba(15,23,42,0) 100%)",
+              filter: "blur(16px)",
+            }}
+          />
           {howItWorksSteps.map((item) => (
-            <div key={item.step} className="relative flex items-center justify-center">
-              <div className="w-[170px] h-[170px] rounded-full border border-brand/40 bg-[radial-gradient(circle_at_20%_50%,rgba(0,230,118,0.08),rgba(0,0,0,0.08))] flex flex-col items-center justify-center">
-                <div className="w-11 h-11 rounded-full bg-brand/25 text-brand font-display font-bold flex items-center justify-center mb-3">
+            <div key={item.step} className="relative z-10 flex items-center justify-center">
+              <div className="relative w-[170px] h-[170px] rounded-full border-[2.33px] border-brand/35 bg-[#020707] shadow-[0_0_8px_rgba(0,230,118,0.06)] flex flex-col items-center justify-center">
+                <div
+                  className="relative w-11 h-11 rounded-full border border-brand/30 text-[#69f0ae] font-display font-bold flex items-center justify-center mb-3 shadow-[inset_0_0_8px_rgba(0,230,118,0.22),0_0_10px_rgba(0,230,118,0.12)]"
+                  style={{ background: "linear-gradient(90deg, rgba(56, 255, 126, 0.3) 0%, rgba(10, 210, 90, 0.27) 100%)" }}
+                >
                   {item.step}
                 </div>
-                <h3 className="font-display font-medium text-2xl leading-[1.15] max-w-[110px]">{item.title}</h3>
+                <h3 className="font-display font-medium text-[15px] leading-[1.2] text-center">
+                  <span className="block">{item.line1}</span>
+                  <span className="block">{item.line2}</span>
+                </h3>
               </div>
             </div>
           ))}
@@ -107,9 +145,9 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-6 mb-16">
         <div
           className="relative overflow-hidden rounded-2xl border border-brand/55 shadow-[0_0_18px_rgba(0,230,118,0.4),0_0_48px_rgba(0,230,118,0.18)]"
-          style={{ background: "linear-gradient(90deg, rgba(1,12,8,0.98) 0%, rgba(2,10,8,0.98) 52%, rgba(10,16,28,0.92) 100%)" }}
+          style={{ background: "linear-gradient(90deg, rgba(2,12,8,0.95) 0%, rgba(4,12,10,0.91) 48%, rgba(10,16,28,0.94) 100%)" }}
         >
-          <div className="absolute left-0 top-0 h-full w-[62%] bg-[radial-gradient(circle_at_35%_50%,rgba(0,230,118,0.32)_0%,rgba(0,230,118,0.12)_38%,rgba(0,0,0,0)_78%)] pointer-events-none z-0" />
+          <div className="absolute left-0 top-0 h-full w-[62%] bg-[radial-gradient(circle_at_35%_50%,rgba(0,230,118,0.23)_0%,rgba(0,230,118,0.10)_36%,rgba(0,0,0,0)_76%)] pointer-events-none z-0" />
           <div className="relative z-10 grid md:grid-cols-[1fr_260px] gap-8 items-center p-5 md:p-7">
             <div className="md:ml-[50px]">
               <h2 className="font-display font-bold text-4xl md:text-5xl leading-tight mb-4">
