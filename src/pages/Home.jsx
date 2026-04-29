@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import StatsBar from "../components/StatsBar";
 import PoolCard from "../components/PoolCard";
-import heroPlatform from "../assets/home/airdrops_v4 1.png";
+import heroPlatformVideo from "../assets/home/airdrops_v4.mp4";
 import referralIllustration from "../assets/home/referral-illustration.png";
 
 export default function Home() {
@@ -22,18 +22,25 @@ export default function Home() {
 
   return (
     <div>
-      <section className="relative -mt-[82px] pt-[82px] overflow-hidden border-b border-surface-3/40">
-        <div className="absolute inset-y-0 right-0 w-[65%] pointer-events-none">
-          <img
-            src={heroPlatform}
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-cover object-[65%_78%]"
-          />
-          {/* Bridge gradient to match the darker grid background on the left. */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#060b18]/95 via-[#060b18]/35 to-transparent" />
-          {/* Extra edge smoothing where the hero image begins. */}
-          <div className="absolute left-0 top-0 bottom-0 w-[35%] bg-gradient-to-r from-[#060b18]/80 via-[#060b18]/35 to-transparent" />
+      <section className="relative -mt-[82px] pt-[82px] overflow-hidden bg-[#010101]">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute hidden lg:block top-[21px] left-[513px] w-[1097px] h-[629px] opacity-100 overflow-hidden">
+            <video
+              src={heroPlatformVideo}
+              autoPlay
+              loop
+              muted
+              playsInline
+              aria-hidden="true"
+              className="h-full w-full object-cover object-center"
+            />
+          </div>
+          {/* Blend video edge into the dark hero background */}
+          <div className="absolute inset-y-0 left-0 w-[66%] bg-gradient-to-r from-[#010101] via-[#010101] to-transparent" />
+          <div className="absolute inset-y-0 left-[40%] w-[34%] bg-gradient-to-r from-[#010101]/98 via-[#010101]/78 to-transparent blur-[3px]" />
+          <div className="absolute inset-y-0 left-[52%] w-[20%] bg-gradient-to-r from-[#010101]/72 via-[#010101]/36 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#010101]/32 via-transparent to-[#010101]/38" />
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-b from-transparent to-[#010101]" />
         </div>
 
         <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[760px] h-[260px] rounded-full opacity-30 blur-[100px]"
@@ -68,13 +75,23 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 py-10"><StatsBar /></section>
+      <section className="max-w-7xl mx-auto px-6 pt-[71px] pb-10"><StatsBar /></section>
 
       <section className="max-w-7xl mx-auto px-6 mb-20">
         <div className="relative mb-8">
           <div className="text-center">
-            <h2 className="font-display font-bold text-3xl text-slate-100 mb-2">Top Vaults</h2>
-            <p className="text-muted max-w-lg mx-auto">Curated yield strategies, on-chain and verifiable</p>
+            <h2
+              className="text-slate-100 mb-2 text-[56px] leading-[63px] tracking-[0.02em] text-center"
+              style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600 }}
+            >
+              Top Vaults
+            </h2>
+            <p
+              className="text-muted max-w-lg mx-auto text-[16px] leading-[32px] tracking-[0] text-center"
+              style={{ fontFamily: "Inter, sans-serif", fontWeight: 400 }}
+            >
+              Curated yield strategies, on-chain and verifiable
+            </p>
           </div>
           <Link to="/pools" className="btn-primary !text-sm !py-2 !px-4 absolute right-0 top-1/2 -translate-y-1/2 hidden md:inline-flex">View All →</Link>
         </div>
@@ -89,40 +106,23 @@ export default function Home() {
 
       <section id="how-it-works" className="max-w-7xl mx-auto px-6 mb-24">
         <div className="text-center mb-10">
-          <h2 className="font-display font-bold text-3xl mb-3">How It Works</h2>
-          <p className="text-muted max-w-lg mx-auto">Three steps to start earning yield on your stablecoins</p>
+          <h2
+            className="mb-3 text-[56px] leading-[63px] tracking-[0.02em] text-center"
+            style={{ fontFamily: "Poppins, sans-serif", fontWeight: 600 }}
+          >
+            How It Works
+          </h2>
+          <p
+            className="text-muted max-w-lg mx-auto text-[16px] leading-[32px] tracking-[0] text-center"
+            style={{ fontFamily: "Inter, sans-serif", fontWeight: 400 }}
+          >
+            Three steps to start earning yield on your stablecoins
+          </p>
         </div>
-        <div className="relative grid md:grid-cols-3 gap-6 md:gap-12 lg:gap-20 max-w-5xl mx-auto">
+        <div className="relative grid md:grid-cols-3 gap-6 md:gap-[191px] lg:gap-[271px] max-w-5xl mx-auto">
           {/* connector lines between circles */}
           <div className="hidden md:block absolute top-[84px] left-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
           <div className="hidden md:block absolute top-[84px] right-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
-          {/* glow highlight based on provided spec (72.2869px square, 0deg) */}
-          <div
-            className="hidden md:block absolute pointer-events-none"
-            style={{
-              width: "72.28699493408203px",
-              height: "72.28699493408203px",
-              top: "60.63px",
-              left: "94.44px",
-              opacity: 1,
-              background:
-                "linear-gradient(90deg, rgba(15,23,42,0) 0%, rgba(0,230,118,0.85) 50%, rgba(15,23,42,0) 100%)",
-              filter: "blur(16px)",
-            }}
-          />
-          <div
-            className="hidden md:block absolute pointer-events-none"
-            style={{
-              width: "72.28699493408203px",
-              height: "72.28699493408203px",
-              top: "60.63px",
-              right: "94.44px",
-              opacity: 1,
-              background:
-                "linear-gradient(90deg, rgba(15,23,42,0) 0%, rgba(0,230,118,0.85) 50%, rgba(15,23,42,0) 100%)",
-              filter: "blur(16px)",
-            }}
-          />
           {howItWorksSteps.map((item) => (
             <div key={item.step} className="relative z-10 flex items-center justify-center">
               <div className="relative w-[170px] h-[170px] rounded-full border-[2.33px] border-brand/35 bg-[#020707] shadow-[0_0_8px_rgba(0,230,118,0.06)] flex flex-col items-center justify-center">
@@ -142,12 +142,13 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 mb-16">
+      <section className="max-w-5xl mx-auto px-6 mb-16">
         <div
-          className="relative overflow-hidden rounded-2xl border border-brand/55 shadow-[0_0_18px_rgba(0,230,118,0.4),0_0_48px_rgba(0,230,118,0.18)]"
-          style={{ background: "linear-gradient(90deg, rgba(2,12,8,0.95) 0%, rgba(4,12,10,0.91) 48%, rgba(10,16,28,0.94) 100%)" }}
+          className="relative overflow-hidden rounded-2xl border border-brand/35"
+          style={{ background: "#010101" }}
         >
-          <div className="absolute left-0 top-0 h-full w-[62%] bg-[radial-gradient(circle_at_35%_50%,rgba(0,230,118,0.23)_0%,rgba(0,230,118,0.10)_36%,rgba(0,0,0,0)_76%)] pointer-events-none z-0" />
+          <div className="absolute left-0 top-0 h-full w-[66%] bg-[radial-gradient(circle_at_28%_52%,rgba(0,230,118,0.14)_0%,rgba(0,230,118,0.07)_34%,rgba(0,230,118,0.02)_56%,rgba(0,0,0,0)_84%)] pointer-events-none z-0" />
+          <div className="absolute inset-y-0 left-0 w-[58%] bg-gradient-to-r from-[rgba(3,24,14,0.42)] via-[rgba(3,20,13,0.20)] to-transparent pointer-events-none z-0" />
           <div className="relative z-10 grid md:grid-cols-[1fr_260px] gap-8 items-center p-5 md:p-7">
             <div className="md:ml-[50px]">
               <h2 className="font-display font-bold text-4xl md:text-5xl leading-tight mb-4">
