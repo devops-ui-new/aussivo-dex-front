@@ -16,7 +16,7 @@ export default function PoolCard({ pool, variant = "default" }) {
   const isHomeDark = variant === "home-dark";
 
   const cardClass = isHomeDark
-    ? "block rounded-2xl border border-brand/35 p-4 bg-[linear-gradient(100deg,rgba(6,10,15,0.98)_22%,rgba(0,230,118,0.06)_58%,rgba(6,10,15,0.94)_100%)] shadow-[0_0_18px_rgba(0,230,118,0.08)] hover:border-brand/55 transition-all duration-300 group"
+    ? "block rounded-2xl border border-brand/35 p-4 bg-[linear-gradient(0deg,rgba(10,10,10,0.7),rgba(10,10,10,0.7)),linear-gradient(106.04deg,rgba(0,0,0,0.3)_40.12%,rgba(56,255,126,0.09)_100%)] shadow-[0_0_18px_rgba(0,230,118,0.08)] hover:border-brand/55 transition-all duration-300 group"
     : "block bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:shadow-brand/5 transition-all duration-300 group";
   const titleClass = isHomeDark ? "text-slate-100" : "text-gray-900 group-hover:text-brand-dark";
   const apyLabelClass = isHomeDark ? "text-slate-400" : "text-gray-400";
