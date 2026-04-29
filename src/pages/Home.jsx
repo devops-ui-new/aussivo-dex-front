@@ -119,13 +119,13 @@ export default function Home() {
             Three steps to start earning yield on your stablecoins
           </p>
         </div>
-        <div className="relative grid md:grid-cols-3 gap-6 md:gap-[191px] lg:gap-[271px] max-w-5xl mx-auto">
+        <div className="relative grid md:grid-cols-3 gap-8 md:gap-0 w-full md:w-[calc(100%+140px)] md:-mx-[70px] mx-auto">
           {/* connector lines between circles */}
-          <div className="hidden md:block absolute top-[84px] left-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
-          <div className="hidden md:block absolute top-[84px] right-[22%] w-[18%] h-[1px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676] to-transparent opacity-90" />
+          <div className="hidden md:block absolute top-[95px] left-[calc(16.666%+95px)] w-[calc(33.333%-190px)] h-[2px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676cc] to-transparent opacity-75" />
+          <div className="hidden md:block absolute top-[95px] left-[calc(50%+95px)] w-[calc(33.333%-190px)] h-[2px] pointer-events-none bg-gradient-to-r from-transparent via-[#00e676cc] to-transparent opacity-75" />
           {howItWorksSteps.map((item) => (
             <div key={item.step} className="relative z-10 flex items-center justify-center">
-              <div className="relative w-[170px] h-[170px] rounded-full border-[2.33px] border-brand/35 bg-[#020707] shadow-[0_0_8px_rgba(0,230,118,0.06)] flex flex-col items-center justify-center">
+              <div className="relative w-[190px] h-[190px] min-w-[190px] aspect-square rounded-full border-[2.33px] border-brand/35 bg-[#020707] shadow-[0_0_8px_rgba(0,230,118,0.06)] flex shrink-0 flex-col items-center justify-center">
                 <div
                   className="relative w-11 h-11 rounded-full border border-brand/30 text-[#69f0ae] font-display font-bold flex items-center justify-center mb-3 shadow-[inset_0_0_8px_rgba(0,230,118,0.22),0_0_10px_rgba(0,230,118,0.12)]"
                   style={{ background: "linear-gradient(90deg, rgba(56, 255, 126, 0.3) 0%, rgba(10, 210, 90, 0.27) 100%)" }}
@@ -142,9 +142,9 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 mb-16">
+      <section className="max-w-5xl mx-auto px-6 pt-10 mb-16">
         <div
-          className="relative overflow-hidden rounded-2xl border border-brand/35"
+          className="relative overflow-hidden rounded-2xl border-[2.5px] border-brand/35"
           style={{ background: "#010101" }}
         >
           <div className="absolute left-0 top-0 h-full w-[66%] bg-[radial-gradient(circle_at_28%_52%,rgba(0,230,118,0.14)_0%,rgba(0,230,118,0.07)_34%,rgba(0,230,118,0.02)_56%,rgba(0,0,0,0)_84%)] pointer-events-none z-0" />
