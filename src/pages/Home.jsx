@@ -21,7 +21,7 @@ export default function Home() {
   ];
 
   return (
-    <div>
+    <div className="bg-[radial-gradient(120%_80%_at_50%_0%,rgba(7,18,12,0.45)_0%,rgba(1,1,1,1)_55%)]">
       <section className="relative -mt-[82px] pt-[82px] overflow-hidden bg-[#010101]">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute hidden lg:block top-[21px] left-[390px] w-[1097px] h-[629px] opacity-100 overflow-hidden">
