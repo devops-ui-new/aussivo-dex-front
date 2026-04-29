@@ -24,7 +24,7 @@ export default function Home() {
     <div>
       <section className="relative -mt-[82px] pt-[82px] overflow-hidden bg-[#010101]">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute hidden lg:block top-[21px] left-[513px] w-[1097px] h-[629px] opacity-100 overflow-hidden">
+          <div className="absolute hidden lg:block top-[21px] left-[390px] w-[1097px] h-[629px] opacity-100 overflow-hidden">
             <video
               src={heroPlatformVideo}
               autoPlay
