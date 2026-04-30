@@ -5,15 +5,19 @@ import { useWeb3 } from "../context/Web3Context";
 import { ethers } from "ethers";
 import toast from "react-hot-toast";
 
-// Read: full ERC-20. Write: `transfer` without a return so estimation/signing is compatible with
-// BEP-20 that do not return data the same way as OpenZeppelin.
+// Read ERC-20 state and write approvals.
 const ERC20_READ_ABI = [
-  "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)",
   "function decimals() view returns (uint8)",
   "function balanceOf(address owner) view returns (uint256)",
   "function symbol() view returns (string)",
+  "function allowance(address owner, address spender) view returns (uint256)",
 ];
-const ERC20_TRANSFER_NO_RET = ["function transfer(address to, uint256 amount)"];
+const ERC20_APPROVE_NO_RET = ["function approve(address spender, uint256 amount)"];
+const VAULT_DEPOSIT_ABI = [
+  "function depositUSDTWithRequest(uint256 amount, string vaultId, bytes32 requestId)",
+  "function depositUSDCWithRequest(uint256 amount, string vaultId, bytes32 requestId)",
+];
 
 const RPC_BY_CHAIN = {
   56: [
@@ -199,9 +203,15 @@ export default function PoolDetail() {
 
       const senderAddr = await activeSigner.getAddress();
       const tokenAddr = ethers.getAddress(qrData.tokenAddress);
-      const toAddr = ethers.getAddress(qrData.depositAddress);
-      if (toAddr === ethers.ZeroAddress) {
-        toast.error("Invalid deposit address. Regenerate the deposit from this page.");
+      const vaultAddr = ethers.getAddress(qrData.vaultContractAddress || qrData.depositAddress);
+      if (vaultAddr === ethers.ZeroAddress) {
+        toast.error("Invalid vault address. Regenerate the deposit from this page.");
+        setPaying(false);
+        return;
+      }
+      const requestId = String(qrData.requestId || "").trim();
+      if (!/^0x[a-fA-F0-9]{64}$/.test(requestId)) {
+        toast.error("Invalid requestId. Regenerate deposit and try again.");
         setPaying(false);
         return;
       }
@@ -229,7 +239,7 @@ export default function PoolDetail() {
         return;
       }
 
-      const erc20Write = new ethers.Contract(tokenAddr, ERC20_TRANSFER_NO_RET, activeSigner);
+      const erc20Write = new ethers.Contract(tokenAddr, ERC20_APPROVE_NO_RET, activeSigner);
       if (balance < value) {
         const have = Number(ethers.formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 });
         const networkLabel = Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet";
@@ -244,8 +254,23 @@ export default function PoolDetail() {
         return;
       }
 
-      toast.loading("Confirm in your wallet...", { id: "pay" });
-      const tx = await erc20Write.transfer(toAddr, value, { gasLimit: 200_000n });
+      const allowance = await erc20Read.allowance(senderAddr, vaultAddr).catch(() => 0n);
+      if (allowance < value) {
+        toast.loading("Approve token spend in wallet...", { id: "pay" });
+        const approveTx = await erc20Write.approve(vaultAddr, value, { gasLimit: 200_000n });
+        await approveTx.wait(1);
+      }
+
+      toast.loading("Sign deposit transaction in wallet...", { id: "pay" });
+      const vaultWrite = new ethers.Contract(vaultAddr, VAULT_DEPOSIT_ABI, activeSigner);
+      const depositFn = String(qrData.depositFunction || "").trim()
+        || (String(qrData.asset || "").toUpperCase() === "USDT"
+          ? "depositUSDTWithRequest"
+          : "depositUSDCWithRequest");
+      if (!["depositUSDTWithRequest", "depositUSDCWithRequest"].includes(depositFn)) {
+        throw new Error("Unsupported vault deposit function");
+      }
+      const tx = await vaultWrite[depositFn](value, String(pool._id || id), requestId, { gasLimit: 300_000n });
       toast.loading("Waiting for confirmation...", { id: "pay" });
       setTxHash(tx.hash);
       await tx.wait(1);
@@ -502,7 +527,7 @@ export default function PoolDetail() {
                   {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
                 </button>
                 <div className="text-[11px] text-slate-500 mb-3">
-                  Opens MetaMask / Trust / Coinbase to sign an ERC-20 transfer. No QR scan needed.
+                  Wallet flow: approve token, then call vault deposit with requestId for deterministic allocation.
                 </div>
 
                 {txHash && (
