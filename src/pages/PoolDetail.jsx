@@ -128,7 +128,7 @@ function MiniChart({ seed = "0", apy = 18 }) {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { account, token, signer, connectWallet } = useWeb3();
+  const { account, token, signer, connectWalletConnect, walletProvider, walletType, getActiveProvider } = useWeb3();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -163,16 +163,23 @@ export default function PoolDetail() {
   const maxDeposit = Number(pool.max_deposit ?? pool.maxDeposit ?? 0);
 
   const ensureChain = async (targetChainId) => {
-    if (!window.ethereum) throw new Error("No wallet detected");
+    const ethProvider = getActiveProvider() || walletProvider || window.ethereum;
+    if (!ethProvider) throw new Error("No wallet detected");
     const hex = "0x" + Number(targetChainId).toString(16);
-    const current = await window.ethereum.request({ method: "eth_chainId" });
-    if (current?.toLowerCase() === hex.toLowerCase()) return;
+    const normalizeChainHex = (v) => {
+      if (typeof v === "string") return v.toLowerCase();
+      if (typeof v === "number") return "0x" + v.toString(16);
+      if (typeof v === "bigint") return "0x" + v.toString(16);
+      return "";
+    };
+    const current = await ethProvider.request({ method: "eth_chainId" });
+    if (normalizeChainHex(current) === hex.toLowerCase()) return;
     try {
-      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+      await ethProvider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
     } catch (err) {
       if (err?.code === 4902) {
         const isMainnet = Number(targetChainId) === 56;
-        await window.ethereum.request({
+        await ethProvider.request({
           method: "wallet_addEthereumChain",
           params: [{
             chainId: hex,
@@ -188,17 +195,20 @@ export default function PoolDetail() {
 
   const handlePayWithWallet = async () => {
     if (!qrData) return;
-    if (!window.ethereum) { toast.error("Install MetaMask or a compatible wallet"); return; }
     setPaying(true);
     try {
       let activeSigner = signer;
+      let activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
       if (!activeSigner) {
-        await connectWallet();
-        const p = new ethers.BrowserProvider(window.ethereum);
+        const addr = await connectWalletConnect();
+        if (!addr) throw new Error("Wallet connection cancelled");
+        activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+        const p = new ethers.BrowserProvider(activeEip1193);
         activeSigner = await p.getSigner();
       }
       await ensureChain(qrData.chainId);
-      const freshProvider = new ethers.BrowserProvider(window.ethereum);
+      activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+      const freshProvider = new ethers.BrowserProvider(activeEip1193);
       activeSigner = await freshProvider.getSigner();
 
       const senderAddr = await activeSigner.getAddress();
@@ -257,8 +267,27 @@ export default function PoolDetail() {
       const allowance = await erc20Read.allowance(senderAddr, vaultAddr).catch(() => 0n);
       if (allowance < value) {
         toast.loading("Approve token spend in wallet...", { id: "pay" });
-        const approveTx = await erc20Write.approve(vaultAddr, value, { gasLimit: 200_000n });
-        await approveTx.wait(1);
+        try {
+          // USDT-like tokens can require resetting allowance to 0 before increasing.
+          if (allowance > 0n) {
+            const resetTx = await erc20Write.approve(vaultAddr, 0n, { gasLimit: 200_000n });
+            await resetTx.wait(1);
+          }
+          const approveTx = await erc20Write.approve(vaultAddr, value, { gasLimit: 200_000n });
+          await approveTx.wait(1);
+        } catch (approveErr) {
+          const aMsg = approveErr?.shortMessage || approveErr?.reason || approveErr?.data?.message || approveErr?.message || "Approve failed";
+          console.error("[Approve error]", {
+            message: aMsg,
+            chainId: qrData.chainId,
+            senderAddr,
+            tokenAddr,
+            vaultAddr,
+            requiredValue: value.toString(),
+            currentAllowance: allowance.toString(),
+          });
+          throw new Error(`Approve failed: ${aMsg}`);
+        }
       }
 
       toast.loading("Sign deposit transaction in wallet...", { id: "pay" });
@@ -280,8 +309,12 @@ export default function PoolDetail() {
       const isDecode =
         /cannot slice beyond data bounds|BUFFER_OVERRUN/i.test(String(raw)) || err?.code === "BUFFER_OVERRUN";
       const isMissingRevert = /missing revert data/i.test(String(raw));
+      const isApprove = /approve failed/i.test(String(raw));
       const friendly = isDecode
         ? "RPC returned bad data. Switch MetaMask to BSC, try again, or set a custom BSC network RPC in your wallet (see docs.binance.com for stable endpoints)."
+        : isApprove
+          ? `Token approval failed. This can happen if token/wallet/network mismatch exists. ` +
+            `Verify token ${qrData?.tokenAddress?.slice(0, 10)}..., vault ${qrData?.vaultContractAddress?.slice(0, 10)}..., and chain ${qrData?.chainIdHex || qrData?.chainId}.`
         : isMissingRevert
           ? `The transfer can’t be completed (the chain rejected the transfer). ` +
             `On BSC you need enough ${qrData?.asset || "USDT"} for this amount, and some BNB for network fees. ` +
@@ -499,17 +532,10 @@ export default function PoolDetail() {
 
             {tab === "invest" ? (qrData ? (
               <div className="text-center">
-                <img src={qrData.qrCode} alt="Deposit QR" className="mx-auto w-56 h-56 rounded-xl border-2 border-brand/20 mb-4" />
                 <div className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-4 mb-4">
-                  <div className="text-xs text-slate-500 mb-1">Send exactly</div>
+                  <div className="text-xs text-slate-500 mb-1">Deposit Amount</div>
                   <div className="text-xl font-display font-bold text-brand">{qrData.amount} {qrData.asset}</div>
                   <div className="text-xs text-slate-500 mt-1">on {qrData.network}</div>
-                </div>
-                <div className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-4 mb-4 text-left">
-                  <div className="text-xs text-slate-500 mb-1">To Address</div>
-                  <div className="text-sm font-mono break-all text-slate-300">{qrData.depositAddress}</div>
-                  <button onClick={() => { navigator.clipboard.writeText(qrData.depositAddress); toast.success("Copied!"); }}
-                    className="mt-2 text-xs text-brand hover:underline">Copy Address</button>
                 </div>
                 {qrData.instructions?.length > 0 && (
                   <div className="text-left space-y-2 mb-4">
@@ -521,13 +547,25 @@ export default function PoolDetail() {
                   </div>
                 )}
 
+                <button
+                  onClick={async () => {
+                    const addr = await connectWalletConnect();
+                    if (addr) toast.success("WalletConnect connected");
+                    else toast.error("WalletConnect connection failed");
+                  }}
+                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-white hover:shadow-lg hover:shadow-blue-500/20 mb-2 flex items-center justify-center gap-2"
+                >
+                  <span>🔗</span>
+                  {walletType === "walletconnect" ? "WalletConnect Connected" : "Connect with WalletConnect"}
+                </button>
+
                 <button onClick={handlePayWithWallet} disabled={paying}
                   className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2">
                   <span>🦊</span>
                   {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
                 </button>
                 <div className="text-[11px] text-slate-500 mb-3">
-                  Wallet flow: approve token, then call vault deposit with requestId for deterministic allocation.
+                  WalletConnect v2 flow: connect any mobile wallet, then approve + sign deposit call.
                 </div>
 
                 {txHash && (

@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@walletconnect/ethereum-provider": "^2.23.9",
     "ethers": "^6.13.0",
     "framer-motion": "^11.3.0",
     "react": "^18.3.1",

@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import { useState, useEffect } from "react";
 import AuthModal from "./AuthModal";
-import toast from "react-hot-toast";
 import brandLogo from "../assets/branding/logo-aussivo.png";
 
 const NAV = [
@@ -21,20 +20,6 @@ export default function Navbar() {
   useEffect(() => { if (isLoggedIn) setShowAuth(false); }, [isLoggedIn]);
 
   const handleConnect = async () => {
-    if (!window.ethereum) {
-      toast.error(
-        (t) => (
-          <span>
-            No wallet detected. Install{" "}
-            <a href="https://metamask.io/download/" target="_blank" rel="noreferrer"
-              className="underline text-brand font-semibold">MetaMask</a>{" "}
-            or another Web3 wallet to continue.
-          </span>
-        ),
-        { duration: 6000 }
-      );
-      return;
-    }
     const addr = await connectWallet();
     if (!addr) return; // user rejected the wallet prompt — don't open sign-in
     setShowAuth(true);
