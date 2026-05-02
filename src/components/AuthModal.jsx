@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
 /**
- * Registration modal — ONLY shown for new users.
- * Returning users are auto-logged-in via wallet-auth (no modal needed).
- * 
- * Flow: Enter Email → OTP → Done
- * (Wallet is already connected at this point via Navbar)
+ * Sign-in modal. User connects a wallet first (from the Navbar), then this modal
+ * always collects email + OTP — we never silently re-auth based on the connected
+ * wallet. The connected wallet is linked to the account automatically after sign-in.
+ * Multiple wallets can be linked to one email.
  */
 export default function AuthModal({ onClose }) {
+  const navigate = useNavigate();
   const { account, short, sendOTP, verifyOTP } = useWeb3();
   const [step, setStep] = useState("register"); // register → otp
   const [email, setEmail] = useState("");
@@ -40,8 +41,11 @@ export default function AuthModal({ onClose }) {
     setLoading(true);
     try {
       const res = await verifyOTP(email, otp);
-      if (res.status === 200) { toast.success("Welcome to Aussivo.DEX!"); onClose(); }
-      else toast.error(res.message);
+      if (res.status === 200) {
+        toast.success("Welcome to Aussivo.DEX!");
+        onClose();
+        navigate("/portfolio", { replace: true });
+      } else toast.error(res.message);
     } catch { toast.error("Verification failed"); }
     setLoading(false);
   };
@@ -54,8 +58,8 @@ export default function AuthModal({ onClose }) {
 
         <div className="flex items-center justify-between p-5 border-b border-surface-4/50">
           <div>
-            <h2 className="font-display font-bold text-lg text-white">{step === "register" ? "Create Account" : "Verify Email"}</h2>
-            <p className="text-xs text-muted mt-0.5">One-time setup — you won't need to do this again</p>
+            <h2 className="font-display font-bold text-lg text-white">{step === "register" ? "Sign in" : "Verify Email"}</h2>
+            <p className="text-xs text-muted mt-0.5">Sign in with your email — we'll send a one-time code.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-surface-3/80 flex items-center justify-center text-muted hover:text-white">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -94,7 +98,7 @@ export default function AuthModal({ onClose }) {
                 <input type="text" value={referralCode} onChange={e => setReferralCode(e.target.value)} placeholder="AUSX7K9M (optional)" className="input-field" />
               </div>
               <button onClick={handleSendOTP} disabled={loading || !email} className="btn-primary w-full py-3.5 disabled:opacity-50">
-                {loading ? "Sending..." : "Send Verification Code"}
+                {loading ? "Sending..." : "Send code"}
               </button>
             </div>
           )}
@@ -111,10 +115,14 @@ export default function AuthModal({ onClose }) {
               <div>
                 <input type="text" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000" className="input-field text-center text-2xl font-display font-bold tracking-[12px]" maxLength={6} autoFocus />
-                <p className="text-[11px] text-muted mt-1.5 text-center">Dev mode: use code <strong className="text-brand">123456</strong></p>
+                {import.meta.env.DEV && (
+                  <p className="text-[11px] text-muted mt-1.5 text-center">
+                    Dev: if SMTP is off, the API logs the code in the server terminal.
+                  </p>
+                )}
               </div>
               <button onClick={handleVerifyOTP} disabled={loading || otp.length !== 6} className="btn-primary w-full py-3.5 disabled:opacity-50">
-                {loading ? "Verifying..." : "Verify & Create Account"}
+                {loading ? "Verifying..." : "Verify & sign in"}
               </button>
               <div className="flex items-center justify-between">
                 <button onClick={() => { setStep("register"); setOtp(""); }} className="text-xs text-muted hover:text-slate-300">← Change email</button>
@@ -126,7 +134,7 @@ export default function AuthModal({ onClose }) {
 
         <div className="px-5 pb-5">
           <div className="bg-surface-2/30 rounded-xl p-3 text-center">
-            <p className="text-[11px] text-muted">After this one-time setup, you'll auto-login every time you connect your wallet.</p>
+            <p className="text-[11px] text-muted">Every sign-in uses a one-time code. Link any number of wallets after you're signed in.</p>
           </div>
         </div>
       </div>

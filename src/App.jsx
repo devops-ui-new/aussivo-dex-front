@@ -6,6 +6,7 @@ import Home from "./pages/Home";
 import Pools from "./pages/Pools";
 import PoolDetail from "./pages/PoolDetail";
 import Portfolio from "./pages/Portfolio";
+import Swap from "./pages/Swap";
 import Referral from "./pages/Referral";
 import DepositQR from "./pages/DepositQR";
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/pools" element={<Pools />} />
           <Route path="/pool/:id" element={<PoolDetail />} />
+          <Route path="/swap" element={<Swap />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/referral" element={<Referral />} />
           <Route path="/deposit/:vaultId" element={<DepositQR />} />

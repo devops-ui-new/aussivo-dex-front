@@ -88,6 +88,21 @@ export default function DepositQR() {
                 </div>
               ))}
             </div>
+            <div className="bg-surface-2/50 rounded-xl p-3 mb-4 border border-amber-500/30 text-left">
+              <div className="text-xs text-amber-300 mb-1">Wallet did not open sign page?</div>
+              <div className="text-xs text-muted">
+                Some wallets scan the QR but do not open contract-call signing. Use the in-app wallet flow instead.
+              </div>
+            </div>
+            <Link
+              to={`/pool/${vaultId}`}
+              className="btn-primary w-full py-3 text-center block mb-3"
+            >
+              Pay with Connected Wallet
+            </Link>
+            <div className="text-[11px] text-muted mb-3">
+              Desktop users can sign directly with browser extension wallet on the next screen.
+            </div>
             <button onClick={() => setQrData(null)} className="btn-secondary w-full">Generate New QR</button>
           </div>
         )}

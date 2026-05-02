@@ -6,7 +6,7 @@
 
 body {
   font-family: "DM Sans", sans-serif;
-  background: #060b18;
+  background: #000000;
   color: #e2e8f0;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -28,6 +28,19 @@ body {
 .glass:hover {
   border-color: rgba(0, 230, 118, 0.2);
   box-shadow: 0 0 30px rgba(0, 230, 118, 0.05);
+}
+
+/* Stats cards (Home top section) */
+/* Use a more neutral black/green tint so it blends with the hero background. */
+.stats-card {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.72) 0%, rgba(10, 16, 28, 0.78) 100%);
+  border: 1px solid rgba(0, 230, 118, 0.10);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+}
+.stats-card:hover {
+  border-color: rgba(0, 230, 118, 0.22);
+  box-shadow: 0 0 26px rgba(0, 230, 118, 0.06);
 }
 
 /* Glow */

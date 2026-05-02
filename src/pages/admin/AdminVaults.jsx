@@ -1,20 +1,68 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/admin/AdminLayout";
 import toast from "react-hot-toast";
 
 import { API } from "../../config/api";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
 
-const EMPTY_FORM = { name: "", description: "", asset: "USDT", vaultType: "locked", lockDays: 30, durationMonths: 12, minDeposit: 50, maxDeposit: 100000, capacity: 5000000, earlyExitFeeBps: 500, tiers: [{ minAmount: 50, maxAmount: 5000, apyPercent: 1 }, { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 }, { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }], strategies: [{ name: "Aave V3", allocation: 40, protocol: "aave" }, { name: "Reserve", allocation: 60, protocol: "reserve" }] };
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  asset: "USDT",
+  vaultType: "locked",
+  lockDays: 30,
+  durationMonths: 12,
+  minDeposit: 50,
+  maxDeposit: 100000,
+  capacity: 5000000,
+  earlyExitFeeBps: 500,
+  displayApy: 18,
+  displayApyMonthly: 1.5,
+  popularityRank: "",
+  investorsLabel: "",
+  rebalanceFrequency: "Weekly",
+  lastRebalanceDate: "",
+  nextRebalanceDate: "",
+  performanceFeePercent: 20,
+  reserveRatioLabel: "20-30%",
+  rewardCycleLabel: "Real-time accrual",
+  smartContractLabel: "Verified ✓",
+  circuitBreakerLabel: "Active ✓",
+  tiers: [
+    { minAmount: 50, maxAmount: 5000, apyPercent: 1 },
+    { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 },
+    { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }
+  ],
+  strategies: [
+    { name: "Aave V3", allocation: 40, protocol: "aave", color: "#B6509E", apy: "4.2%", status: "Active" },
+    { name: "Reserve", allocation: 60, protocol: "reserve", color: "#3B82F6", apy: "—", status: "Liquid" }
+  ]
+};
 
 export default function AdminVaults() {
+  const navigate = useNavigate();
   const [vaults, setVaults] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const load = () => fetch(`${API}/api/admin/vaults`, { headers: hdr() }).then(r => r.json()).then(d => setVaults(d.data || [])).catch(() => {});
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/vaults`, { headers: hdr() });
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("admin_token");
+        toast.error("Session expired, please log in again");
+        navigate("/admin/login");
+        return;
+      }
+      const d = await res.json();
+      setVaults(Array.isArray(d.data) ? d.data : []);
+    } catch (e) {
+      toast.error("Failed to load vaults");
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -24,7 +72,12 @@ export default function AdminVaults() {
     try {
       const url = editId ? `${API}/api/admin/vaults/${editId}` : `${API}/api/admin/vaults`;
       const method = editId ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: hdr(), body: JSON.stringify(form) });
+      const payload = {
+        ...form,
+        displayApy: form.displayApy === "" || form.displayApy == null ? null : Number(form.displayApy),
+        displayApyMonthly: form.displayApyMonthly === "" || form.displayApyMonthly == null ? null : Number(form.displayApyMonthly),
+      };
+      const res = await fetch(url, { method, headers: hdr(), body: JSON.stringify(payload) });
       const d = await res.json();
       if (d.status === 200 || d.status === 201) {
         toast.success(editId ? "Vault updated" : "Vault created");
@@ -35,7 +88,37 @@ export default function AdminVaults() {
   };
 
   const editVault = (v) => {
-    setForm({ name: v.name, description: v.description || "", asset: v.asset, vaultType: v.vaultType, lockDays: v.lockDays, durationMonths: v.durationMonths, minDeposit: v.minDeposit, maxDeposit: v.maxDeposit, capacity: v.capacity, earlyExitFeeBps: v.earlyExitFeeBps, tiers: v.tiers, strategies: v.strategies || [] });
+    setForm({
+      name: v.name,
+      description: v.description || "",
+      asset: v.asset,
+      vaultType: v.vaultType,
+      lockDays: v.lockDays,
+      durationMonths: v.durationMonths,
+      minDeposit: v.minDeposit,
+      maxDeposit: v.maxDeposit,
+      capacity: v.capacity,
+      earlyExitFeeBps: v.earlyExitFeeBps,
+      displayApy: v.displayApy ?? "",
+      displayApyMonthly: v.displayApyMonthly ?? "",
+      popularityRank: v.popularityRank || "",
+      investorsLabel: v.investorsLabel || "",
+      rebalanceFrequency: v.rebalanceFrequency || "",
+      lastRebalanceDate: v.lastRebalanceDate || "",
+      nextRebalanceDate: v.nextRebalanceDate || "",
+      performanceFeePercent: v.performanceFeePercent ?? 20,
+      reserveRatioLabel: v.reserveRatioLabel || "20-30%",
+      rewardCycleLabel: v.rewardCycleLabel || "Real-time accrual",
+      smartContractLabel: v.smartContractLabel || "Verified ✓",
+      circuitBreakerLabel: v.circuitBreakerLabel || "Active ✓",
+      tiers: v.tiers,
+      strategies: (v.strategies || []).map((s) => ({
+        ...s,
+        color: s.color || "",
+        apy: s.apy || "",
+        status: s.status || "",
+      })),
+    });
     setEditId(v._id); setShowForm(true);
   };
 
@@ -67,7 +150,37 @@ export default function AdminVaults() {
             <div><label className="text-xs text-muted mb-1 block">Min Deposit</label><input type="number" value={form.minDeposit} onChange={e => set("minDeposit", +e.target.value)} className="input-field text-sm" /></div>
             <div><label className="text-xs text-muted mb-1 block">Max Deposit</label><input type="number" value={form.maxDeposit} onChange={e => set("maxDeposit", +e.target.value)} className="input-field text-sm" /></div>
             <div><label className="text-xs text-muted mb-1 block">Early Exit Fee (bps)</label><input type="number" value={form.earlyExitFeeBps} onChange={e => set("earlyExitFeeBps", +e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Display APY % (public)</label><input type="number" step="0.01" placeholder="Blank = tier-based" value={form.displayApy ?? ""} onChange={e => set("displayApy", e.target.value === "" ? "" : +e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Display APY Monthly %</label><input type="number" step="0.01" placeholder="Blank = auto" value={form.displayApyMonthly ?? ""} onChange={e => set("displayApyMonthly", e.target.value === "" ? "" : +e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Popularity Rank</label><input value={form.popularityRank} onChange={e => set("popularityRank", e.target.value)} placeholder="#1" className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Investors Label</label><input value={form.investorsLabel} onChange={e => set("investorsLabel", e.target.value)} placeholder="2.4K" className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Rebalance Frequency</label><input value={form.rebalanceFrequency} onChange={e => set("rebalanceFrequency", e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Last Rebalance Date</label><input value={form.lastRebalanceDate} onChange={e => set("lastRebalanceDate", e.target.value)} placeholder="01 Apr 2026" className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Next Rebalance Date</label><input value={form.nextRebalanceDate} onChange={e => set("nextRebalanceDate", e.target.value)} placeholder="01 May 2026" className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Performance Fee %</label><input type="number" step="0.01" value={form.performanceFeePercent} onChange={e => set("performanceFeePercent", +e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Reserve Ratio Label</label><input value={form.reserveRatioLabel} onChange={e => set("reserveRatioLabel", e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Reward Cycle Label</label><input value={form.rewardCycleLabel} onChange={e => set("rewardCycleLabel", e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Smart Contract Label</label><input value={form.smartContractLabel} onChange={e => set("smartContractLabel", e.target.value)} className="input-field text-sm" /></div>
+            <div><label className="text-xs text-muted mb-1 block">Circuit Breaker Label</label><input value={form.circuitBreakerLabel} onChange={e => set("circuitBreakerLabel", e.target.value)} className="input-field text-sm" /></div>
           </div>
+          <div>
+            <label className="text-xs text-muted mb-2 block">Strategies (shown on /pools and /pool/:id)</label>
+            {form.strategies.map((s, i) => (
+              <div key={i} className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-2 items-center">
+                <input placeholder="Name" value={s.name} onChange={e => { const next = [...form.strategies]; next[i].name = e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                <input type="number" placeholder="Allocation %" value={s.allocation} onChange={e => { const next = [...form.strategies]; next[i].allocation = +e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                <input placeholder="Protocol" value={s.protocol || ""} onChange={e => { const next = [...form.strategies]; next[i].protocol = e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                <input placeholder="Color (#hex)" value={s.color || ""} onChange={e => { const next = [...form.strategies]; next[i].color = e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                <input placeholder="APY label (e.g. 8.5%)" value={s.apy || ""} onChange={e => { const next = [...form.strategies]; next[i].apy = e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                <div className="flex items-center gap-2">
+                  <input placeholder="Status" value={s.status || ""} onChange={e => { const next = [...form.strategies]; next[i].status = e.target.value; set("strategies", next); }} className="input-field text-sm" />
+                  <button onClick={() => set("strategies", form.strategies.filter((_, j) => j !== i))} className="text-red-400 text-xs px-2">✕</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={() => set("strategies", [...form.strategies, { name: "", allocation: 0, protocol: "", color: "", apy: "", status: "" }])} className="text-xs text-brand hover:underline">+ Add Strategy</button>
+          </div>
+
           <div><label className="text-xs text-muted mb-1 block">Description</label><input value={form.description} onChange={e => set("description", e.target.value)} className="input-field text-sm" /></div>
 
           <div>

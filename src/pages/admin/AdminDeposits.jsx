@@ -1,31 +1,18 @@
 import { useEffect, useState } from "react";
 import AdminLayout from "../../components/admin/AdminLayout";
-import toast from "react-hot-toast";
 
 import { API } from "../../config/api";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
 
 export default function AdminDeposits() {
   const [deposits, setDeposits] = useState([]); const [total, setTotal] = useState(0); const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState(""); const [showManual, setShowManual] = useState(false);
-  const [manual, setManual] = useState({ userId: "", vaultId: "", amount: "", txHash: "" }); const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("");
 
   const load = () => {
     const q = new URLSearchParams({ page, limit: 20, ...(filter && { status: filter }) });
     fetch(`${API}/api/admin/deposits?${q}`, { headers: hdr() }).then(r => r.json()).then(d => { setDeposits(d.data?.deposits || []); setTotal(d.data?.total || 0); });
   };
   useEffect(load, [page, filter]);
-
-  const confirmManual = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/api/admin/deposits/confirm`, { method: "POST", headers: hdr(), body: JSON.stringify({ ...manual, amount: +manual.amount }) });
-      const d = await res.json();
-      if (d.status === 201) { toast.success("Deposit confirmed"); setShowManual(false); setManual({ userId: "", vaultId: "", amount: "", txHash: "" }); load(); }
-      else toast.error(d.message);
-    } catch { toast.error("Failed"); }
-    setLoading(false);
-  };
 
   return (
     <AdminLayout title="Deposits">
@@ -35,23 +22,8 @@ export default function AdminDeposits() {
           <select value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }} className="input-field text-sm w-36">
             <option value="">All</option><option value="active">Active</option><option value="matured">Matured</option><option value="withdrawn">Withdrawn</option>
           </select>
-          <button onClick={() => setShowManual(!showManual)} className="btn-primary text-sm">{showManual ? "Cancel" : "+ Manual Confirm"}</button>
         </div>
       </div>
-
-      {showManual && (
-        <div className="glass p-6 mb-6 space-y-4">
-          <h3 className="font-display font-semibold">Manually Confirm Deposit</h3>
-          <p className="text-xs text-muted">Use this when a user has sent USDT/USDC on-chain and it needs manual confirmation.</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-muted mb-1 block">User ID</label><input value={manual.userId} onChange={e => setManual(m => ({...m, userId: e.target.value}))} className="input-field text-sm" placeholder="MongoDB User ID" /></div>
-            <div><label className="text-xs text-muted mb-1 block">Vault ID</label><input value={manual.vaultId} onChange={e => setManual(m => ({...m, vaultId: e.target.value}))} className="input-field text-sm" placeholder="MongoDB Vault ID" /></div>
-            <div><label className="text-xs text-muted mb-1 block">Amount ($)</label><input type="number" value={manual.amount} onChange={e => setManual(m => ({...m, amount: e.target.value}))} className="input-field text-sm" /></div>
-            <div><label className="text-xs text-muted mb-1 block">Tx Hash (optional)</label><input value={manual.txHash} onChange={e => setManual(m => ({...m, txHash: e.target.value}))} className="input-field text-sm" /></div>
-          </div>
-          <button onClick={confirmManual} disabled={loading} className="btn-primary py-3 px-8 disabled:opacity-50">{loading ? "Confirming..." : "Confirm Deposit"}</button>
-        </div>
-      )}
 
       <div className="glass overflow-hidden">
         <table className="w-full text-sm">

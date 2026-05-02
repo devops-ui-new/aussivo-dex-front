@@ -5,11 +5,34 @@ import toast from "react-hot-toast";
 
 import { API } from "../config/api";
 
+function LockCountdown({ unlockAt }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ms = new Date(unlockAt).getTime() - now;
+  if (ms <= 0) return <span className="tag tag-green text-xs">Unlocked</span>;
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return (
+    <div className="text-right">
+      <div className="text-[10px] text-muted uppercase tracking-wider">Unlocks in</div>
+      <div className="font-mono text-sm font-semibold text-yellow-400">
+        {d}d {String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();
   const [deposits, setDeposits] = useState([]);
   const [yieldLogs, setYieldLogs] = useState([]);
   const [loading, setLoading] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const hdr = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
 
@@ -22,7 +45,12 @@ export default function Portfolio() {
     refreshUser();
   };
 
-  useEffect(load, [token]);
+  useEffect(() => {
+    load();
+    if (!token) return;
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [token]);
 
   const handleWithdraw = async (amount, asset, source) => {
     if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
@@ -33,10 +61,53 @@ export default function Portfolio() {
         body: JSON.stringify({ amount, asset, source, walletAddress: user.walletAddress }),
       });
       const d = await res.json();
-      if (d.status === 201) { toast.success("Withdrawal request submitted!"); load(); }
+      if (d.status === 201) { toast.success("Withdrawal submitted — processing on-chain"); load(); }
       else toast.error(d.message);
     } catch { toast.error("Failed"); }
     setLoading(false);
+  };
+
+  const handleRedeem = async (depositId) => {
+    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
+    if (!confirm("Redeem this deposit? Your principal will be returned to your wallet once the redemption is processed on-chain.")) return;
+    setLoading(depositId);
+    try {
+      const res = await fetch(`${API}/api/user/withdraw`, {
+        method: "POST", headers: hdr(),
+        body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
+      });
+      const d = await res.json();
+      if (d.status === 201) { toast.success("Redemption submitted — processing on-chain"); load(); }
+      else toast.error(d.message || "Failed");
+    } catch { toast.error("Failed"); }
+    setLoading(null);
+  };
+
+  const handleRedeemAll = async (depositIds) => {
+    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
+    if (!depositIds?.length) return;
+    if (!confirm(`Redeem all ${depositIds.length} redeemable deposits? Your principal will be returned to your wallet once processed on-chain.`)) return;
+    setBulkLoading(true);
+    try {
+      let ok = 0;
+      let skipped = 0;
+      for (const depositId of depositIds) {
+        const res = await fetch(`${API}/api/user/withdraw`, {
+          method: "POST",
+          headers: hdr(),
+          body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
+        });
+        const d = await res.json();
+        if (d?.status === 201) ok++;
+        else skipped++;
+      }
+      toast.success(`Submitted ${ok} redemption${ok === 1 ? "" : "s"}${skipped ? ` (${skipped} already pending/unavailable)` : ""}`);
+      load();
+    } catch {
+      toast.error("Failed to redeem all");
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   if (!token) return (
@@ -47,7 +118,13 @@ export default function Portfolio() {
   );
 
   const activeDeposits = deposits.filter(d => d.status === "active");
+  const nowTs = Date.now();
   const totalStaked = activeDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const redeemableDeposits = activeDeposits.filter((d) => {
+    const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
+    const isLocked = lockDate && lockDate.getTime() > nowTs;
+    return !isLocked && !d.redemptionPending;
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
@@ -87,7 +164,18 @@ export default function Portfolio() {
       </div>
 
       {/* Active Deposits */}
-      <h2 className="font-display font-semibold text-xl mb-4">Active Deposits ({activeDeposits.length})</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-semibold text-xl">Active Deposits ({activeDeposits.length})</h2>
+        {redeemableDeposits.length > 0 && (
+          <button
+            onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
+            disabled={bulkLoading}
+            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50"
+          >
+            {bulkLoading ? "Redeeming..." : "Redeem all →"}
+          </button>
+        )}
+      </div>
       {activeDeposits.length === 0 ? (
         <div className="glass p-10 text-center">
           <p className="text-muted mb-4">No active deposits yet.</p>
@@ -98,6 +186,24 @@ export default function Portfolio() {
           {activeDeposits.map((d, i) => {
             const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
             const isLocked = lockDate && lockDate > new Date();
+            const vaultId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
+            const vaultName = d.vaultId?.name || "Vault";
+            const annualApy = Number(d.poolApy ?? (d.apyPercent || 0) * 12).toFixed(1);
+            const monthlyApy = Number(d.poolApyMonthly ?? d.apyPercent ?? 0);
+            const createdAt = d.createdAt ? new Date(d.createdAt) : null;
+            const hoursElapsed = createdAt ? (nowTs - createdAt.getTime()) / 3600000 : 0;
+            // `apyPercent` on the deposit is the monthly APY percent (used by the backend monthly cron).
+            // We linearly accrue the same monthly yield across hours for a smoother "generated till now" UX.
+            const apyMonthlyPercent = Number(d.apyPercent || 0);
+            const amountNum = Number(d.amount || 0);
+            const hoursPerMonth = 30 * 24;
+            const monthlyYield = amountNum * apyMonthlyPercent / 100; // approx amount paid per "month" used by backend cron
+            const estYieldGenerated = hoursElapsed > 0 ? monthlyYield * (hoursElapsed / hoursPerMonth) : 0;
+            const maxEstYieldGenerated = monthlyYield * (Number(d.maxYieldPayments || 0));
+            const estYieldGeneratedCapped = d.maxYieldPayments
+              ? Math.min(estYieldGenerated, maxEstYieldGenerated)
+              : estYieldGenerated;
+            const estYieldPerHour = hoursPerMonth > 0 ? (monthlyYield / hoursPerMonth) : 0;
             return (
               <div key={i} className="glass p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -105,18 +211,43 @@ export default function Portfolio() {
                     {d.asset === "USDC" ? "$" : "₮"}
                   </div>
                   <div>
-                    <div className="font-semibold">{d.vaultId?.name || "Vault"}</div>
-                    <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {d.apyPercent}% monthly</div>
+                    {vaultId ? (
+                      <Link to={`/pool/${vaultId}`} className="font-semibold hover:text-brand transition-colors">{vaultName} →</Link>
+                    ) : (
+                      <div className="font-semibold">{vaultName}</div>
+                    )}
+                    <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
                     <div className="text-xs text-muted mt-0.5">Yield paid: {d.yieldPaymentsCount}/{d.maxYieldPayments} months</div>
                   </div>
                 </div>
                 <div className="text-right">
                   {isLocked ? (
-                    <span className="tag tag-yellow text-xs">Locked until {lockDate.toLocaleDateString()}</span>
+                    <LockCountdown unlockAt={d.lockUntil} />
+                  ) : d.redemptionPending ? (
+                    <span className="tag tag-yellow text-xs">Redemption Pending</span>
                   ) : (
-                    <span className="tag tag-green text-xs">Flexible</span>
+                    <button
+                      onClick={() => handleRedeem(d._id)}
+                      disabled={loading === d._id || bulkLoading}
+                      className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
+                      {loading === d._id ? "..." : "Redeem →"}
+                    </button>
                   )}
-                  <div className="text-xs text-muted mt-1">+${d.totalYieldPaid?.toFixed(2) || "0"} earned</div>
+                  <div className="text-xs text-muted mt-1">
+                    +${estYieldGeneratedCapped.toFixed(6)} earned
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5">
+                    Paid so far: +${Number(d.totalYieldPaid || 0).toFixed(2)}
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5">
+                    {hoursElapsed > 0 && apyMonthlyPercent > 0 && amountNum > 0 ? (
+                      <>
+                        Generated (est.): +${estYieldGeneratedCapped.toFixed(6)} · ≈ ${estYieldPerHour.toFixed(8)}/hr
+                      </>
+                    ) : (
+                      <>Generated (est.): —</>
+                    )}
+                  </div>
                 </div>
               </div>
             );
