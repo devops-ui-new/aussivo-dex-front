@@ -32,6 +32,25 @@ const RPC_BY_CHAIN = {
   ],
 };
 
+/** Reads via MetaMask's default BSC RPC often hit -32002 rate limits; use a dedicated HTTP RPC for view calls. Optional `VITE_BSC_RPC_URL` overrides the list. */
+async function getWorkingReadProvider(chainId) {
+  const n = Number(chainId);
+  const custom = (import.meta.env.VITE_BSC_RPC_URL || "").trim();
+  const urls = custom ? [custom] : (RPC_BY_CHAIN[n] || []);
+  if (!urls.length) throw new Error("No read RPC configured for this chain");
+  let lastErr;
+  for (const url of urls) {
+    try {
+      const p = new ethers.JsonRpcProvider(url, n, { staticNetwork: true });
+      await p.getBlockNumber();
+      return p;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 /** Official BSC USDT/USDC use 18 decimals. Skip on-chain `decimals()` to avoid empty RPC + BUFFER_OVERRUN. */
 const CANONICAL_BSC_STABLE_DECIMALS = {
   "0x55d398326f99059ff775485246999027b3197955": 18,
@@ -232,9 +251,18 @@ export default function PoolDetail() {
         return;
       }
 
-      // Read balances/decimals from the *wallet* provider (not a public BSC url). Public RPCs
-      // often return empty `0x` for view calls, which makes ethers v6 throw BUFFER_OVERRUN.
-      const erc20Read = new ethers.Contract(tokenAddr, ERC20_READ_ABI, freshProvider);
+      // Use HTTP RPCs for reads — MetaMask's bundled BSC endpoint often returns -32002 rate limits.
+      // Writes still go through `activeSigner` / the wallet provider.
+      let readProvider;
+      try {
+        readProvider = await getWorkingReadProvider(qrData.chainId);
+      } catch (e) {
+        console.error("[Pay] read RPC failed", e);
+        toast.error("Could not reach BSC to read your balance. Set VITE_BSC_RPC_URL in .env or try again shortly.", { id: "pay" });
+        setPaying(false);
+        return;
+      }
+      const erc20Read = new ethers.Contract(tokenAddr, ERC20_READ_ABI, readProvider);
       const canonicalDec = getCanonicalBscStableDecimals(qrData.tokenAddress);
       const [decimalsRaw, symbolRaw, balance] = await Promise.all([
         canonicalDec != null ? Promise.resolve(canonicalDec) : erc20Read.decimals().catch(() => 18),
@@ -248,7 +276,7 @@ export default function PoolDetail() {
         ? BigInt(String(qrData.amountInBaseUnits).trim())
         : ethers.parseUnits(String(qrData.amount), decimals);
 
-      const bnb = await freshProvider.getBalance(senderAddr);
+      const bnb = await readProvider.getBalance(senderAddr);
       if (bnb === 0n) {
         toast.error("You need a small amount of BNB in this wallet to pay for gas. Add BSC BNB, then try again.");
         setPaying(false);
@@ -277,10 +305,10 @@ export default function PoolDetail() {
           // USDT-like tokens can require resetting allowance to 0 before increasing.
           if (allowance > 0n) {
             const resetTx = await erc20Write.approve(vaultAddr, 0n, { gasLimit: 200_000n });
-            await resetTx.wait(1);
+            await readProvider.waitForTransaction(resetTx.hash, 1);
           }
           const approveTx = await erc20Write.approve(vaultAddr, value, { gasLimit: 200_000n });
-          await approveTx.wait(1);
+          await readProvider.waitForTransaction(approveTx.hash, 1);
         } catch (approveErr) {
           const aMsg = approveErr?.shortMessage || approveErr?.reason || approveErr?.data?.message || approveErr?.message || "Approve failed";
           console.error("[Approve error]", {
@@ -308,15 +336,20 @@ export default function PoolDetail() {
       const tx = await vaultWrite[depositFn](value, String(pool._id || id), requestId, { gasLimit: 300_000n });
       toast.loading("Waiting for confirmation...", { id: "pay" });
       setTxHash(tx.hash);
-      await tx.wait(1);
+      await readProvider.waitForTransaction(tx.hash, 1);
       toast.success("Payment confirmed! Deposit will appear in your portfolio shortly.", { id: "pay" });
     } catch (err) {
       const raw = err?.shortMessage || err?.reason || err?.data?.message || err?.message || "Transaction failed";
       const isDecode =
         /cannot slice beyond data bounds|BUFFER_OVERRUN/i.test(String(raw)) || err?.code === "BUFFER_OVERRUN";
+      const isRpcOverload =
+        err?.code === -32002 ||
+        /-32002|too many errors|retrying in.*minutes/i.test(String(raw));
       const isMissingRevert = /missing revert data/i.test(String(raw));
       const isApprove = /approve failed/i.test(String(raw));
-      const friendly = isDecode
+      const friendly = isRpcOverload
+        ? "MetaMask’s BSC RPC is overloaded. In MetaMask: Networks → BSC → use a custom RPC URL (e.g. https://bsc-rpc.publicnode.com), then try again."
+        : isDecode
         ? "RPC returned bad data. Switch your wallet to BSC, try again, or set a custom BSC network RPC (see docs.binance.com for stable endpoints)."
         : isApprove
           ? `Token approval failed. This can happen if token/wallet/network mismatch exists. ` +
@@ -597,7 +630,7 @@ export default function PoolDetail() {
 
                 <button onClick={() => { setQrData(null); setTxHash(null); }}
                   className="w-full py-3 rounded-xl font-semibold text-sm border border-surface-4/60 text-slate-300 hover:bg-[#0d1324]">
-                  Generate New QR
+                  Change amount
                 </button>
               </div>
             ) : (<>

@@ -103,7 +103,7 @@ export default function DepositQR() {
             <div className="text-[11px] text-muted mb-3">
               Desktop users can sign directly with browser extension wallet on the next screen.
             </div>
-            <button onClick={() => setQrData(null)} className="btn-secondary w-full">Generate New QR</button>
+            <button onClick={() => setQrData(null)} className="btn-secondary w-full">Change amount</button>
           </div>
         )}
       </div>
