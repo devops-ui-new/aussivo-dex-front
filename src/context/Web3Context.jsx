@@ -110,22 +110,36 @@ export function Web3Provider({ children }) {
     return connectWalletConnect();
   }, [connectInjectedWallet, connectWalletConnect]);
 
-  const disconnect = () => {
-    setAccount(null); setSigner(null); setProvider(null);
+  const disconnect = useCallback(async () => {
+    if (walletType === "injected") {
+      const et = typeof window !== "undefined" ? window.ethereum : null;
+      if (et?.request) {
+        try {
+          await et.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] });
+        } catch {
+          /* not all injected wallets support revoke — still clear app state */
+        }
+      }
+    }
+    setAccount(null);
+    setSigner(null);
+    setProvider(null);
+    setChainId(null);
     setWalletProvider(null);
     setWalletType(null);
     activeProviderRef.current = null;
     const activeWc = wcProviderRef.current || wcProvider;
     if (activeWc && typeof activeWc.disconnect === "function") {
-      activeWc.disconnect().catch(() => {});
+      await activeWc.disconnect().catch(() => {});
     }
     wcProviderRef.current = null;
     setWcProvider(null);
-    setToken(null); setUser(null);
+    setToken(null);
+    setUser(null);
     localStorage.removeItem("aussivo_token");
     localStorage.removeItem("aussivo_wallet");
     localStorage.removeItem("aussivo_wallet_type");
-  };
+  }, [wcProvider, walletType]);
 
   // ── Validate existing token on page load ──
   useEffect(() => {
@@ -155,7 +169,7 @@ export function Web3Provider({ children }) {
     const p = walletProvider || window.ethereum;
     if (!p || typeof p.on !== "function") return;
     const onAccountsChanged = async (accts) => {
-      if (!accts || accts.length === 0) disconnect();
+      if (!accts || accts.length === 0) void disconnect();
       else {
         setAccount(accts[0]);
         try {
@@ -186,7 +200,7 @@ export function Web3Provider({ children }) {
         p.removeListener("chainChanged", onChainChanged);
       }
     };
-  }, [walletProvider]);
+  }, [walletProvider, disconnect]);
 
   // ── Auth helpers ──
   const sendOTP = async (email, name, referralCode) => {
