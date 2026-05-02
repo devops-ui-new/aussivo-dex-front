@@ -212,20 +212,39 @@ export default function PoolDetail() {
     }
   };
 
-  const handlePayWithWallet = async () => {
+  /** @param {"injected" | "walletconnect"} mode */
+  const handlePayWithWallet = async (mode) => {
     if (!qrData) return;
     setPaying(true);
     try {
-      const hasInjectedSession = walletType === "injected" && account && signer;
-      const hasWcSession = walletType === "walletconnect" && account && signer;
-      let activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+      let activeEip1193;
 
-      if (!hasInjectedSession && !hasWcSession) {
-        let addr;
-        if (window.ethereum) addr = await connectInjectedWallet();
-        else addr = await connectWalletConnect();
-        if (!addr) throw new Error("Wallet connection cancelled");
-        activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+      if (mode === "injected") {
+        if (!window.ethereum) {
+          toast.error("No browser wallet found. Install MetaMask (or another extension) or use WalletConnect below.");
+          setPaying(false);
+          return;
+        }
+        if (walletType !== "injected" || !account) {
+          const addr = await connectInjectedWallet();
+          if (!addr) {
+            setPaying(false);
+            return;
+          }
+        }
+        activeEip1193 = window.ethereum;
+      } else {
+        if (walletType !== "walletconnect" || !account) {
+          toast.error("Connect with WalletConnect first, then pay with that wallet.");
+          setPaying(false);
+          return;
+        }
+        activeEip1193 = getActiveProvider() || walletProvider;
+        if (!activeEip1193) {
+          toast.error("WalletConnect session not available. Reconnect and try again.");
+          setPaying(false);
+          return;
+        }
       }
 
       if (!activeEip1193) throw new Error("No wallet provider");
@@ -587,7 +606,30 @@ export default function PoolDetail() {
                 )}
 
                 <button
+                  type="button"
+                  onClick={() => handlePayWithWallet("injected")}
+                  disabled={paying || !window.ethereum}
+                  title={!window.ethereum ? "Install a browser wallet extension to use this option" : undefined}
+                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2"
+                >
+                  <span>🦊</span>
+                  {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
+                </button>
+                <p className="text-[11px] text-slate-500 mb-3 text-center">Browser extension (e.g. MetaMask)</p>
+
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-surface-4/60" />
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">or</span>
+                  <div className="flex-1 h-px bg-surface-4/60" />
+                </div>
+
+                <button
+                  type="button"
                   onClick={async () => {
+                    if (walletType === "walletconnect" && account) {
+                      toast.success("Already connected with WalletConnect");
+                      return;
+                    }
                     const addr = await connectWalletConnect();
                     if (addr) toast.success("WalletConnect connected");
                     else toast.error("WalletConnect connection failed");
@@ -595,29 +637,35 @@ export default function PoolDetail() {
                   className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-white hover:shadow-lg hover:shadow-blue-500/20 mb-2 flex items-center justify-center gap-2"
                 >
                   <span>🔗</span>
-                  {walletType === "walletconnect" ? "WalletConnect Connected" : "Connect with WalletConnect"}
+                  {walletType === "walletconnect" ? "WalletConnect connected" : "Connect with WalletConnect"}
                 </button>
 
                 {walletType === "walletconnect" && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await disconnectWallet();
-                      toast.success("WalletConnect disconnected");
-                    }}
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold border border-surface-4/70 text-slate-400 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/5 mb-2 transition-colors"
-                  >
-                    Disconnect WalletConnect
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await disconnectWallet();
+                        toast.success("WalletConnect disconnected");
+                      }}
+                      className="w-full py-2.5 rounded-xl text-sm font-semibold border border-surface-4/70 text-slate-400 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/5 mb-2 transition-colors"
+                    >
+                      Disconnect WalletConnect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePayWithWallet("walletconnect")}
+                      disabled={paying}
+                      className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-[#6366f1] to-[#4f46e5] text-white hover:shadow-lg hover:shadow-indigo-500/20 mb-2 flex items-center justify-center gap-2"
+                    >
+                      <span>🔗</span>
+                      {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with WalletConnect`}
+                    </button>
+                  </>
                 )}
 
-                <button onClick={handlePayWithWallet} disabled={paying}
-                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2">
-                  <span>🦊</span>
-                  {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
-                </button>
                 <div className="text-[11px] text-slate-500 mb-3">
-                  WalletConnect v2 flow: connect any mobile wallet, then approve + sign deposit call.
+                  Connect WalletConnect for a mobile wallet, then approve and sign the deposit. Browser wallet uses your extension directly.
                 </div>
 
                 {txHash && (
