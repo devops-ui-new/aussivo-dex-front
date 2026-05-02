@@ -30,6 +30,8 @@ export function Web3Provider({ children }) {
   const wcModalDisabledRef = useRef(false);
   /** Addresses we already failed to link (409) — avoids spamming the same toast on re-renders / WC reconnects. */
   const linkWalletConflictRef = useRef(new Set());
+  /** True while signing out — avoids WC/MM UI from recursive disconnect + wallet events. */
+  const isSigningOutRef = useRef(false);
   const [token, setToken] = useState(() => localStorage.getItem("aussivo_token"));
   const [user, setUser] = useState(null);
 
@@ -75,6 +77,29 @@ export function Web3Provider({ children }) {
       console.error("Silent reconnect failed:", e);
       return null;
     }
+  }, []);
+
+  const closeWalletConnectModal = useCallback((wc) => {
+    if (!wc) return;
+    try {
+      wc.modal?.close?.();
+    } catch {
+      /* ignore */
+    }
+    window.requestAnimationFrame(() => {
+      try {
+        wc.modal?.close?.();
+      } catch {
+        /* ignore */
+      }
+    });
+    window.setTimeout(() => {
+      try {
+        wc.modal?.close?.();
+      } catch {
+        /* ignore */
+      }
+    }, 50);
   }, []);
 
   const connectWalletConnect = useCallback(async ({ silent = false } = {}) => {
@@ -123,7 +148,10 @@ export function Web3Provider({ children }) {
           return null;
         }
         await wc.connect();
+        closeWalletConnectModal(wc);
       }
+
+      closeWalletConnectModal(wc);
 
       const p = new ethers.BrowserProvider(wc);
       const s = await p.getSigner();
@@ -138,13 +166,16 @@ export function Web3Provider({ children }) {
       localStorage.setItem("aussivo_wallet", addr);
       localStorage.setItem("aussivo_wallet_type", "walletconnect");
       wcConnectingRef.current = false;
+      closeWalletConnectModal(wc);
       return addr;
     } catch (e) {
       wcConnectingRef.current = false;
       console.error("WalletConnect failed:", e);
+      const wc = wcProviderRef.current || wcProvider;
+      closeWalletConnectModal(wc);
       return null;
     }
-  }, [account, signer, walletType, wcProvider]);
+  }, [account, signer, walletType, wcProvider, closeWalletConnectModal]);
 
   const connectWallet = useCallback(async () => {
     if (window.ethereum) return connectInjectedWallet();
@@ -152,37 +183,88 @@ export function Web3Provider({ children }) {
   }, [connectInjectedWallet, connectWalletConnect]);
 
   const disconnect = useCallback(async () => {
-    if (walletType === "injected") {
-      const et = typeof window !== "undefined" ? window.ethereum : null;
-      if (et?.request) {
+    if (isSigningOutRef.current) return;
+    isSigningOutRef.current = true;
+
+    try {
+      // Drop persisted session first so auto-reconnect cannot run mid teardown.
+      localStorage.removeItem("aussivo_token");
+      localStorage.removeItem("aussivo_wallet");
+      localStorage.removeItem("aussivo_wallet_type");
+
+      setToken(null);
+      setUser(null);
+      setAccount(null);
+      setSigner(null);
+      setProvider(null);
+      setChainId(null);
+      setWalletProvider(null);
+      setWalletType(null);
+      activeProviderRef.current = null;
+
+      const activeWc = wcProviderRef.current || wcProvider;
+      if (activeWc) {
         try {
-          await et.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] });
+          activeWc.modal?.close?.();
         } catch {
-          /* not all injected wallets support revoke — still clear app state */
+          /* ignore */
+        }
+        if (typeof activeWc.disconnect === "function") {
+          await activeWc.disconnect().catch(() => {});
         }
       }
+      wcProviderRef.current = null;
+      setWcProvider(null);
+      wcModalDisabledRef.current = false;
+      linkWalletConflictRef.current.clear();
+
+      // Intentionally do NOT call wallet_revokePermissions here — it opens MetaMask /
+      // other injected wallets for many users. Clearing app state is enough for sign-out.
+    } finally {
+      window.setTimeout(() => {
+        isSigningOutRef.current = false;
+      }, 400);
     }
-    setAccount(null);
-    setSigner(null);
-    setProvider(null);
-    setChainId(null);
-    setWalletProvider(null);
-    setWalletType(null);
-    activeProviderRef.current = null;
-    const activeWc = wcProviderRef.current || wcProvider;
-    if (activeWc && typeof activeWc.disconnect === "function") {
-      await activeWc.disconnect().catch(() => {});
+  }, [wcProvider]);
+
+  /** Tear down browser + WalletConnect session only (keeps email / JWT login). */
+  const disconnectWallet = useCallback(async () => {
+    if (isSigningOutRef.current) return;
+    isSigningOutRef.current = true;
+    try {
+      localStorage.removeItem("aussivo_wallet");
+      localStorage.removeItem("aussivo_wallet_type");
+
+      setAccount(null);
+      setSigner(null);
+      setProvider(null);
+      setChainId(null);
+      setWalletProvider(null);
+      setWalletType(null);
+      activeProviderRef.current = null;
+
+      const activeWc = wcProviderRef.current || wcProvider;
+      closeWalletConnectModal(activeWc);
+      if (activeWc) {
+        try {
+          activeWc.modal?.close?.();
+        } catch {
+          /* ignore */
+        }
+        if (typeof activeWc.disconnect === "function") {
+          await activeWc.disconnect().catch(() => {});
+        }
+      }
+      wcProviderRef.current = null;
+      setWcProvider(null);
+      wcModalDisabledRef.current = false;
+      linkWalletConflictRef.current.clear();
+    } finally {
+      window.setTimeout(() => {
+        isSigningOutRef.current = false;
+      }, 400);
     }
-    wcProviderRef.current = null;
-    setWcProvider(null);
-    wcModalDisabledRef.current = false;
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem("aussivo_token");
-    localStorage.removeItem("aussivo_wallet");
-    localStorage.removeItem("aussivo_wallet_type");
-    linkWalletConflictRef.current.clear();
-  }, [wcProvider, walletType]);
+  }, [wcProvider, closeWalletConnectModal]);
 
   // ── Validate existing token on page load ──
   useEffect(() => {
@@ -203,15 +285,24 @@ export function Web3Provider({ children }) {
     const existingToken = localStorage.getItem("aussivo_token");
     const savedType = localStorage.getItem("aussivo_wallet_type");
     if (!saved || !existingToken) return;
-    if (savedType === "walletconnect") connectWalletConnect({ silent: true });
-    else if (window.ethereum) void reconnectInjectedWalletSilent(saved);
-  }, [connectWalletConnect, reconnectInjectedWalletSilent]);
+    // Do not call silent WC again if we're already connected with the same address —
+    // a second connectWalletConnect run re-triggers AppKit and leaves the modal open.
+    if (savedType === "walletconnect") {
+      if (walletType === "walletconnect" && account && saved.toLowerCase() === account.toLowerCase()) {
+        return;
+      }
+      void connectWalletConnect({ silent: true });
+    } else if (window.ethereum) {
+      void reconnectInjectedWalletSilent(saved);
+    }
+  }, [connectWalletConnect, reconnectInjectedWalletSilent, walletType, account]);
 
   // ── Listen for wallet changes ──
   useEffect(() => {
     const p = walletProvider || window.ethereum;
     if (!p || typeof p.on !== "function") return;
     const onAccountsChanged = async (accts) => {
+      if (isSigningOutRef.current) return;
       if (!accts || accts.length === 0) void disconnect();
       else {
         setAccount(accts[0]);
@@ -226,6 +317,7 @@ export function Web3Provider({ children }) {
       }
     };
     const onChainChanged = async () => {
+      if (isSigningOutRef.current) return;
       try {
         const bp = new ethers.BrowserProvider(p);
         const s = await bp.getSigner();
@@ -291,9 +383,17 @@ export function Web3Provider({ children }) {
   // are attributed to this email's portfolio.
   useEffect(() => {
     if (!token || !user || !account) return;
-    const connected = account.toLowerCase();
+    let connected;
+    try {
+      connected = ethers.getAddress(account).toLowerCase();
+    } catch {
+      return;
+    }
     const known = new Set(
-      [...(user.walletAddresses || []).map((w) => (w || "").toLowerCase()), (user.walletAddress || "").toLowerCase()].filter(Boolean),
+      [
+        ...(user.walletAddresses || []).map((w) => (w || "").trim().toLowerCase()).filter(Boolean),
+        (user.walletAddress || "").trim().toLowerCase(),
+      ].filter(Boolean),
     );
     if (known.has(connected)) return;
     if (linkWalletConflictRef.current.has(connected)) return;
@@ -308,7 +408,7 @@ export function Web3Provider({ children }) {
         }
       } else if (d?.status === 409) {
         linkWalletConflictRef.current.add(connected);
-        toast.error("This wallet is already linked to another account", { id: `link-wallet-409-${connected}` });
+        // No toast: WalletConnect often hit false positives; backend now uses DB id for conflict checks.
       }
     });
     return () => {
@@ -326,7 +426,7 @@ export function Web3Provider({ children }) {
       walletProvider, walletType,
       isLoggedIn,
       getActiveProvider,
-      connectWallet, connectInjectedWallet, connectWalletConnect, disconnect, sendOTP, verifyOTP, refreshUser, linkWallet, API,
+      connectWallet, connectInjectedWallet, connectWalletConnect, disconnect, disconnectWallet, sendOTP, verifyOTP, refreshUser, linkWallet, API,
     }}>
       {children}
     </Web3Ctx.Provider>

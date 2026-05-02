@@ -128,7 +128,7 @@ function MiniChart({ seed = "0", apy = 18 }) {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { account, token, connectWalletConnect, walletProvider, walletType, getActiveProvider } = useWeb3();
+  const { account, token, signer, connectInjectedWallet, connectWalletConnect, disconnectWallet, walletProvider, walletType, getActiveProvider } = useWeb3();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -197,16 +197,23 @@ export default function PoolDetail() {
     if (!qrData) return;
     setPaying(true);
     try {
-      // Always use WalletConnect for this button — ignore any injected-wallet connection
-      // so users can pay from their mobile / WC account even if MetaMask is active.
-      const addr = await connectWalletConnect();
-      if (!addr) throw new Error("Wallet connection cancelled");
-      let activeEip1193 = getActiveProvider() || walletProvider;
-      if (!activeEip1193) throw new Error("No WalletConnect provider");
+      const hasInjectedSession = walletType === "injected" && account && signer;
+      const hasWcSession = walletType === "walletconnect" && account && signer;
+      let activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+
+      if (!hasInjectedSession && !hasWcSession) {
+        let addr;
+        if (window.ethereum) addr = await connectInjectedWallet();
+        else addr = await connectWalletConnect();
+        if (!addr) throw new Error("Wallet connection cancelled");
+        activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+      }
+
+      if (!activeEip1193) throw new Error("No wallet provider");
       const p = new ethers.BrowserProvider(activeEip1193);
       let activeSigner = await p.getSigner();
       await ensureChain(qrData.chainId);
-      activeEip1193 = getActiveProvider() || walletProvider;
+      activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
       const freshProvider = new ethers.BrowserProvider(activeEip1193);
       activeSigner = await freshProvider.getSigner();
 
@@ -255,7 +262,7 @@ export default function PoolDetail() {
         const shortAddr = `${senderAddr.slice(0, 6)}…${senderAddr.slice(-4)}`;
         toast.error(
           `Wallet ${shortAddr} holds ${have} ${symbolRaw} on ${networkLabel} (need ${qrData.amount}). ` +
-          `Confirm your WalletConnect wallet is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
+          `Confirm your wallet is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
           { id: "pay", duration: 10000 }
         );
         console.log("[Pay debug]", { senderAddr, tokenAddress: qrData.tokenAddress, chainId: qrData.chainId, balance: balance.toString(), decimals, symbol: symbolRaw });
@@ -557,6 +564,19 @@ export default function PoolDetail() {
                   <span>🔗</span>
                   {walletType === "walletconnect" ? "WalletConnect Connected" : "Connect with WalletConnect"}
                 </button>
+
+                {walletType === "walletconnect" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await disconnectWallet();
+                      toast.success("WalletConnect disconnected");
+                    }}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold border border-surface-4/70 text-slate-400 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/5 mb-2 transition-colors"
+                  >
+                    Disconnect WalletConnect
+                  </button>
+                )}
 
                 <button onClick={handlePayWithWallet} disabled={paying}
                   className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2">
