@@ -128,7 +128,7 @@ function MiniChart({ seed = "0", apy = 18 }) {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { account, token, signer, connectWalletConnect, walletProvider, walletType, getActiveProvider } = useWeb3();
+  const { account, token, connectWalletConnect, walletProvider, walletType, getActiveProvider } = useWeb3();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -197,17 +197,16 @@ export default function PoolDetail() {
     if (!qrData) return;
     setPaying(true);
     try {
-      let activeSigner = signer;
-      let activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
-      if (!activeSigner) {
-        const addr = await connectWalletConnect();
-        if (!addr) throw new Error("Wallet connection cancelled");
-        activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
-        const p = new ethers.BrowserProvider(activeEip1193);
-        activeSigner = await p.getSigner();
-      }
+      // Always use WalletConnect for this button — ignore any injected-wallet connection
+      // so users can pay from their mobile / WC account even if MetaMask is active.
+      const addr = await connectWalletConnect();
+      if (!addr) throw new Error("Wallet connection cancelled");
+      let activeEip1193 = getActiveProvider() || walletProvider;
+      if (!activeEip1193) throw new Error("No WalletConnect provider");
+      const p = new ethers.BrowserProvider(activeEip1193);
+      let activeSigner = await p.getSigner();
       await ensureChain(qrData.chainId);
-      activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
+      activeEip1193 = getActiveProvider() || walletProvider;
       const freshProvider = new ethers.BrowserProvider(activeEip1193);
       activeSigner = await freshProvider.getSigner();
 
@@ -256,7 +255,7 @@ export default function PoolDetail() {
         const shortAddr = `${senderAddr.slice(0, 6)}…${senderAddr.slice(-4)}`;
         toast.error(
           `Wallet ${shortAddr} holds ${have} ${symbolRaw} on ${networkLabel} (need ${qrData.amount}). ` +
-          `Confirm MetaMask is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
+          `Confirm your WalletConnect wallet is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
           { id: "pay", duration: 10000 }
         );
         console.log("[Pay debug]", { senderAddr, tokenAddress: qrData.tokenAddress, chainId: qrData.chainId, balance: balance.toString(), decimals, symbol: symbolRaw });
@@ -311,7 +310,7 @@ export default function PoolDetail() {
       const isMissingRevert = /missing revert data/i.test(String(raw));
       const isApprove = /approve failed/i.test(String(raw));
       const friendly = isDecode
-        ? "RPC returned bad data. Switch MetaMask to BSC, try again, or set a custom BSC network RPC in your wallet (see docs.binance.com for stable endpoints)."
+        ? "RPC returned bad data. Switch your wallet to BSC, try again, or set a custom BSC network RPC (see docs.binance.com for stable endpoints)."
         : isApprove
           ? `Token approval failed. This can happen if token/wallet/network mismatch exists. ` +
             `Verify token ${qrData?.tokenAddress?.slice(0, 10)}..., vault ${qrData?.vaultContractAddress?.slice(0, 10)}..., and chain ${qrData?.chainIdHex || qrData?.chainId}.`
