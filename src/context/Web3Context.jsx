@@ -82,6 +82,8 @@ export function Web3Provider({ children }) {
     if (isSigningOutRef.current) return;
     isSigningOutRef.current = true;
 
+    const eth = activeProviderRef.current || walletProvider || (typeof window !== "undefined" ? window.ethereum : null);
+
     try {
       localStorage.removeItem("aussivo_token");
       localStorage.removeItem("aussivo_wallet");
@@ -97,12 +99,24 @@ export function Web3Provider({ children }) {
       setWalletType(null);
       activeProviderRef.current = null;
       linkWalletConflictRef.current.clear();
+
+      // Revoke injected-wallet account access for this origin (MetaMask, Rabby, etc.); unsupported wallets no-op.
+      if (eth?.request) {
+        try {
+          await eth.request({
+            method: "wallet_revokePermissions",
+            params: [{ eth_accounts: {} }],
+          });
+        } catch {
+          /* ignore: method missing or user rejected */
+        }
+      }
     } finally {
       window.setTimeout(() => {
         isSigningOutRef.current = false;
       }, 400);
     }
-  }, []);
+  }, [walletProvider]);
 
   useEffect(() => {
     if (!token) return;
