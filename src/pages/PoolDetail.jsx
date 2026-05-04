@@ -1,68 +1,19 @@
 import { API } from "../config/api";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
-import { ethers } from "ethers";
 import toast from "react-hot-toast";
+import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
+import { DEPOSIT_STAY_WARNING } from "../constants/depositModalCopy";
 
-// Read ERC-20 state and write approvals.
-const ERC20_READ_ABI = [
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function decimals() view returns (uint8)",
-  "function balanceOf(address owner) view returns (uint256)",
-  "function symbol() view returns (string)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-];
-const ERC20_APPROVE_NO_RET = ["function approve(address spender, uint256 amount)"];
-const VAULT_DEPOSIT_ABI = [
-  "function depositUSDTWithRequest(uint256 amount, string vaultId, bytes32 requestId)",
-  "function depositUSDCWithRequest(uint256 amount, string vaultId, bytes32 requestId)",
-];
-
-const RPC_BY_CHAIN = {
-  56: [
-    "https://bsc-rpc.publicnode.com",
-    "https://binance.llamarpc.com",
-    "https://bsc-dataseed.bnbchain.org",
-  ],
-  97: [
-    "https://bsc-testnet-rpc.publicnode.com",
-    "https://bsc-testnet.public.blastapi.io",
-    "https://data-seed-prebsc-1-s1.binance.org:8545",
-  ],
-};
-
-/** Reads via MetaMask's default BSC RPC often hit -32002 rate limits; use a dedicated HTTP RPC for view calls. Optional `VITE_BSC_RPC_URL` overrides the list. */
-async function getWorkingReadProvider(chainId) {
-  const n = Number(chainId);
-  const custom = (import.meta.env.VITE_BSC_RPC_URL || "").trim();
-  const urls = custom ? [custom] : (RPC_BY_CHAIN[n] || []);
-  if (!urls.length) throw new Error("No read RPC configured for this chain");
-  let lastErr;
-  for (const url of urls) {
-    try {
-      const p = new ethers.JsonRpcProvider(url, n, { staticNetwork: true });
-      await p.getBlockNumber();
-      return p;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
+function formatRemaining(ms) {
+  if (ms <= 0) return "0:00";
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
 }
-
-/** Official BSC USDT/USDC use 18 decimals. Skip on-chain `decimals()` to avoid empty RPC + BUFFER_OVERRUN. */
-const CANONICAL_BSC_STABLE_DECIMALS = {
-  "0x55d398326f99059ff775485246999027b3197955": 18,
-  "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": 18,
-  "0x337610d27c682e347c9cd60bd4b3b107c9d34dd": 18,
-  "0x64544969ed7ebbf5f083679233325356ebe738930": 18,
-};
-
-const getCanonicalBscStableDecimals = (addr) => {
-  if (!addr) return null;
-  return CANONICAL_BSC_STABLE_DECIMALS[addr.toLowerCase()] ?? null;
-};
 
 function DonutChart({ strategies }) {
   let cumulative = 0;
@@ -147,19 +98,187 @@ function MiniChart({ seed = "0", apy = 18 }) {
 
 export default function PoolDetail() {
   const { id } = useParams();
-  const { account, token, signer, connectInjectedWallet, connectWalletConnect, disconnectWallet, walletProvider, walletType, getActiveProvider } = useWeb3();
+  const { token, connectInjectedWallet, walletType } = useWeb3();
   const [pool, setPool] = useState(null);
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
-  const [paying, setPaying] = useState(false);
-  const [txHash, setTxHash] = useState(null);
+  const [payingInjected, setPayingInjected] = useState(false);
   const [tab, setTab] = useState("invest");
   const [timeframe, setTimeframe] = useState("1W");
-  const [qrData, setQrData] = useState(null);
+  /** Active deposit session shown in full-screen modal (QR + poll until credited / matched). */
+  const [depositModal, setDepositModal] = useState(null);
+  const [depositCancelConfirm, setDepositCancelConfirm] = useState(false);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [expiresLeftMs, setExpiresLeftMs] = useState(null);
 
   useEffect(() => { fetch(`${API}/api/pools/${id}`).then(r => r.json()).then(setPool).catch(() => {}); }, [API, id]);
 
+  useEffect(() => {
+    if (!depositModal?.qr?.expiresAt) {
+      setExpiresLeftMs(null);
+      return;
+    }
+    const end = new Date(depositModal.qr.expiresAt).getTime();
+    const tick = () => setExpiresLeftMs(Math.max(0, end - Date.now()));
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [depositModal?.qr?.expiresAt]);
+
+  useEffect(() => {
+    setDepositCancelConfirm(false);
+  }, [depositModal?.qr?.pendingDepositId]);
+
+  const dismissCancelConfirm = useCallback(() => setDepositCancelConfirm(false), []);
+
+  const beginCancelDeposit = useCallback(() => {
+    if (!depositModal?.qr?.pendingDepositId) {
+      setDepositModal(null);
+      return;
+    }
+    setDepositCancelConfirm(true);
+  }, [depositModal]);
+
+  const executeCancelDeposit = useCallback(async () => {
+    const pendingDepositId = depositModal?.qr?.pendingDepositId;
+    if (!pendingDepositId) {
+      setDepositCancelConfirm(false);
+      setDepositModal(null);
+      return;
+    }
+    setCancelSubmitting(true);
+    try {
+      const authToken = localStorage.getItem("aussivo_token");
+      const res = await fetch(`${API}/api/user/deposit/pending/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ pendingDepositId }),
+      });
+      const data = await res.json();
+      if (data.status === 200) {
+        toast.success(data.message || "Monitoring stopped and deposit intent removed.");
+        setDepositCancelConfirm(false);
+        setDepositModal(null);
+      } else {
+        toast.error(data.message || "Could not cancel");
+      }
+    } catch {
+      toast.error("Could not cancel — check your connection.");
+    } finally {
+      setCancelSubmitting(false);
+    }
+  }, [depositModal, API]);
+
+  useEffect(() => {
+    if (!depositModal) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      if (depositCancelConfirm) dismissCancelConfirm();
+      else beginCancelDeposit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [depositModal, depositCancelConfirm, beginCancelDeposit, dismissCancelConfirm]);
+
+  useEffect(() => {
+    if (!depositModal) return;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [depositModal]);
+
+  /** Browser Back during deposit: stay on URL, show warning, open cancel flow (SPA has no native “leave” dialog for in-app back). */
+  const depositHistoryGuardRef = useRef(null);
+  useEffect(() => {
+    const pendingId = depositModal?.qr?.pendingDepositId;
+    if (!pendingId) {
+      const prev = depositHistoryGuardRef.current;
+      depositHistoryGuardRef.current = null;
+      if (prev && window.history.state?.__aussivoDepositGuard === prev) {
+        window.history.back();
+      }
+      return undefined;
+    }
+
+    const onPopState = () => {
+      if (!depositHistoryGuardRef.current) return;
+      window.history.pushState(
+        { __aussivoDepositGuard: depositHistoryGuardRef.current },
+        "",
+        window.location.href
+      );
+      toast(DEPOSIT_STAY_WARNING, { duration: 7000 });
+      beginCancelDeposit();
+    };
+
+    if (depositHistoryGuardRef.current !== pendingId) {
+      depositHistoryGuardRef.current = pendingId;
+      window.history.pushState({ __aussivoDepositGuard: pendingId }, "", window.location.href);
+    }
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [depositModal?.qr?.pendingDepositId, beginCancelDeposit]);
+
+  useEffect(() => {
+    const pendingId = depositModal?.qr?.pendingDepositId;
+    if (!pendingId || !token) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const authToken = localStorage.getItem("aussivo_token");
+        const res = await fetch(`${API}/api/user/deposit/pending/${pendingId}/status`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.status === 404) {
+          toast.error("This deposit session is no longer active.");
+          setDepositModal(null);
+          return;
+        }
+        if (data.status === 200 && data.data?.paymentReceived) {
+          const settled = data.data.fullySettled;
+          toast.success(
+            settled
+              ? "Transaction complete. Your payment is confirmed and settled."
+              : "Payment received — your vault balance is updating now."
+          );
+          try {
+            window.dispatchEvent(new CustomEvent("aussivo-deposit-complete", { detail: { pendingId } }));
+          } catch (_) { /* ignore */ }
+          setDepositModal(null);
+          return;
+        }
+        if (data.status === 200 && data.data?.status === "expired") {
+          toast.error("This deposit address has expired. Start again if you still want to deposit.");
+          setDepositModal(null);
+        }
+      } catch {
+        /* ignore transient network errors */
+      }
+    };
+
+    tick();
+    const iv = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [depositModal?.qr?.pendingDepositId, token, API]);
+
   if (!pool) return <div className="max-w-6xl mx-auto px-6 py-20"><div className="h-[500px] shimmer rounded-2xl" /></div>;
+
+  const modalQr = depositModal?.qr;
 
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
   const strategies = (pool.strategies || []).map((s, i) => ({
@@ -181,210 +300,6 @@ export default function PoolDetail() {
   const minDeposit = Number(pool.min_deposit ?? pool.minDeposit ?? 0);
   const maxDeposit = Number(pool.max_deposit ?? pool.maxDeposit ?? 0);
 
-  const ensureChain = async (targetChainId) => {
-    const ethProvider = getActiveProvider() || walletProvider || window.ethereum;
-    if (!ethProvider) throw new Error("No wallet detected");
-    const hex = "0x" + Number(targetChainId).toString(16);
-    const normalizeChainHex = (v) => {
-      if (typeof v === "string") return v.toLowerCase();
-      if (typeof v === "number") return "0x" + v.toString(16);
-      if (typeof v === "bigint") return "0x" + v.toString(16);
-      return "";
-    };
-    const current = await ethProvider.request({ method: "eth_chainId" });
-    if (normalizeChainHex(current) === hex.toLowerCase()) return;
-    try {
-      await ethProvider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
-    } catch (err) {
-      if (err?.code === 4902) {
-        const isMainnet = Number(targetChainId) === 56;
-        await ethProvider.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: hex,
-            chainName: isMainnet ? "BNB Smart Chain" : "BSC Testnet",
-            nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-            rpcUrls: RPC_BY_CHAIN[Number(targetChainId)] || [],
-            blockExplorerUrls: [isMainnet ? "https://bscscan.com" : "https://testnet.bscscan.com"],
-          }],
-        });
-      } else throw err;
-    }
-  };
-
-  /** @param {"injected" | "walletconnect"} mode */
-  const handlePayWithWallet = async (mode) => {
-    if (!qrData) return;
-    setPaying(true);
-    try {
-      let activeEip1193;
-
-      if (mode === "injected") {
-        if (!window.ethereum) {
-          toast.error("No browser wallet found. Install MetaMask (or another extension) or use WalletConnect below.");
-          setPaying(false);
-          return;
-        }
-        if (walletType !== "injected" || !account) {
-          const addr = await connectInjectedWallet();
-          if (!addr) {
-            setPaying(false);
-            return;
-          }
-        }
-        activeEip1193 = window.ethereum;
-      } else {
-        if (walletType !== "walletconnect" || !account) {
-          toast.error("Connect with WalletConnect first, then pay with that wallet.");
-          setPaying(false);
-          return;
-        }
-        activeEip1193 = getActiveProvider() || walletProvider;
-        if (!activeEip1193) {
-          toast.error("WalletConnect session not available. Reconnect and try again.");
-          setPaying(false);
-          return;
-        }
-      }
-
-      if (!activeEip1193) throw new Error("No wallet provider");
-      const p = new ethers.BrowserProvider(activeEip1193);
-      let activeSigner = await p.getSigner();
-      await ensureChain(qrData.chainId);
-      activeEip1193 = getActiveProvider() || walletProvider || window.ethereum;
-      const freshProvider = new ethers.BrowserProvider(activeEip1193);
-      activeSigner = await freshProvider.getSigner();
-
-      const senderAddr = await activeSigner.getAddress();
-      const tokenAddr = ethers.getAddress(qrData.tokenAddress);
-      const vaultAddr = ethers.getAddress(qrData.vaultContractAddress || qrData.depositAddress);
-      if (vaultAddr === ethers.ZeroAddress) {
-        toast.error("Invalid vault address. Regenerate the deposit from this page.");
-        setPaying(false);
-        return;
-      }
-      const requestId = String(qrData.requestId || "").trim();
-      if (!/^0x[a-fA-F0-9]{64}$/.test(requestId)) {
-        toast.error("Invalid requestId. Regenerate deposit and try again.");
-        setPaying(false);
-        return;
-      }
-
-      // Use HTTP RPCs for reads — MetaMask's bundled BSC endpoint often returns -32002 rate limits.
-      // Writes still go through `activeSigner` / the wallet provider.
-      let readProvider;
-      try {
-        readProvider = await getWorkingReadProvider(qrData.chainId);
-      } catch (e) {
-        console.error("[Pay] read RPC failed", e);
-        toast.error("Could not reach BSC to read your balance. Set VITE_BSC_RPC_URL in .env or try again shortly.", { id: "pay" });
-        setPaying(false);
-        return;
-      }
-      const erc20Read = new ethers.Contract(tokenAddr, ERC20_READ_ABI, readProvider);
-      const canonicalDec = getCanonicalBscStableDecimals(qrData.tokenAddress);
-      const [decimalsRaw, symbolRaw, balance] = await Promise.all([
-        canonicalDec != null ? Promise.resolve(canonicalDec) : erc20Read.decimals().catch(() => 18),
-        erc20Read.symbol().catch(() => qrData.asset),
-        erc20Read.balanceOf(senderAddr).catch(() => 0n),
-      ]);
-      const decimals = Number(decimalsRaw);
-      const hasServerWei =
-        qrData.amountInBaseUnits != null && String(qrData.amountInBaseUnits).trim() !== "";
-      const value = hasServerWei
-        ? BigInt(String(qrData.amountInBaseUnits).trim())
-        : ethers.parseUnits(String(qrData.amount), decimals);
-
-      const bnb = await readProvider.getBalance(senderAddr);
-      if (bnb === 0n) {
-        toast.error("You need a small amount of BNB in this wallet to pay for gas. Add BSC BNB, then try again.");
-        setPaying(false);
-        return;
-      }
-
-      const erc20Write = new ethers.Contract(tokenAddr, ERC20_APPROVE_NO_RET, activeSigner);
-      if (balance < value) {
-        const have = Number(ethers.formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 });
-        const networkLabel = Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet";
-        const shortAddr = `${senderAddr.slice(0, 6)}…${senderAddr.slice(-4)}`;
-        toast.error(
-          `Wallet ${shortAddr} holds ${have} ${symbolRaw} on ${networkLabel} (need ${qrData.amount}). ` +
-          `Confirm your wallet is on the account holding ${symbolRaw} at ${qrData.tokenAddress.slice(0, 10)}….`,
-          { id: "pay", duration: 10000 }
-        );
-        console.log("[Pay debug]", { senderAddr, tokenAddress: qrData.tokenAddress, chainId: qrData.chainId, balance: balance.toString(), decimals, symbol: symbolRaw });
-        setPaying(false);
-        return;
-      }
-
-      const allowance = await erc20Read.allowance(senderAddr, vaultAddr).catch(() => 0n);
-      if (allowance < value) {
-        toast.loading("Approve token spend in wallet...", { id: "pay" });
-        try {
-          // USDT-like tokens can require resetting allowance to 0 before increasing.
-          if (allowance > 0n) {
-            const resetTx = await erc20Write.approve(vaultAddr, 0n, { gasLimit: 200_000n });
-            await readProvider.waitForTransaction(resetTx.hash, 1);
-          }
-          const approveTx = await erc20Write.approve(vaultAddr, value, { gasLimit: 200_000n });
-          await readProvider.waitForTransaction(approveTx.hash, 1);
-        } catch (approveErr) {
-          const aMsg = approveErr?.shortMessage || approveErr?.reason || approveErr?.data?.message || approveErr?.message || "Approve failed";
-          console.error("[Approve error]", {
-            message: aMsg,
-            chainId: qrData.chainId,
-            senderAddr,
-            tokenAddr,
-            vaultAddr,
-            requiredValue: value.toString(),
-            currentAllowance: allowance.toString(),
-          });
-          throw new Error(`Approve failed: ${aMsg}`);
-        }
-      }
-
-      toast.loading("Sign deposit transaction in wallet...", { id: "pay" });
-      const vaultWrite = new ethers.Contract(vaultAddr, VAULT_DEPOSIT_ABI, activeSigner);
-      const depositFn = String(qrData.depositFunction || "").trim()
-        || (String(qrData.asset || "").toUpperCase() === "USDT"
-          ? "depositUSDTWithRequest"
-          : "depositUSDCWithRequest");
-      if (!["depositUSDTWithRequest", "depositUSDCWithRequest"].includes(depositFn)) {
-        throw new Error("Unsupported vault deposit function");
-      }
-      const tx = await vaultWrite[depositFn](value, String(pool._id || id), requestId, { gasLimit: 300_000n });
-      toast.loading("Waiting for confirmation...", { id: "pay" });
-      setTxHash(tx.hash);
-      await readProvider.waitForTransaction(tx.hash, 1);
-      toast.success("Payment confirmed! Deposit will appear in your portfolio shortly.", { id: "pay" });
-    } catch (err) {
-      const raw = err?.shortMessage || err?.reason || err?.data?.message || err?.message || "Transaction failed";
-      const isDecode =
-        /cannot slice beyond data bounds|BUFFER_OVERRUN/i.test(String(raw)) || err?.code === "BUFFER_OVERRUN";
-      const isRpcOverload =
-        err?.code === -32002 ||
-        /-32002|too many errors|retrying in.*minutes/i.test(String(raw));
-      const isMissingRevert = /missing revert data/i.test(String(raw));
-      const isApprove = /approve failed/i.test(String(raw));
-      const friendly = isRpcOverload
-        ? "MetaMask’s BSC RPC is overloaded. In MetaMask: Networks → BSC → use a custom RPC URL (e.g. https://bsc-rpc.publicnode.com), then try again."
-        : isDecode
-        ? "RPC returned bad data. Switch your wallet to BSC, try again, or set a custom BSC network RPC (see docs.binance.com for stable endpoints)."
-        : isApprove
-          ? `Token approval failed. This can happen if token/wallet/network mismatch exists. ` +
-            `Verify token ${qrData?.tokenAddress?.slice(0, 10)}..., vault ${qrData?.vaultContractAddress?.slice(0, 10)}..., and chain ${qrData?.chainIdHex || qrData?.chainId}.`
-        : isMissingRevert
-          ? `The transfer can’t be completed (the chain rejected the transfer). ` +
-            `On BSC you need enough ${qrData?.asset || "USDT"} for this amount, and some BNB for network fees. ` +
-            `Confirm you’re on ${Number(qrData?.chainId) === 56 ? "BSC mainnet" : "BSC testnet"} and the token contract matches your wallet.`
-        : /transfer amount exceeds balance/i.test(raw)
-          ? `Insufficient token balance on ${Number(qrData.chainId) === 56 ? "BSC mainnet" : "BSC testnet"}. Make sure the wallet holds ${qrData.asset} on the correct network.`
-          : raw;
-      toast.error(friendly, { id: "pay", duration: 8000 });
-    }
-    setPaying(false);
-  };
-
   const handleDeposit = async () => {
     if (!token) { toast.error("Please sign in first"); return; }
     if (!amount || parseFloat(amount) <= 0) { toast.error("Enter an amount"); return; }
@@ -397,10 +312,29 @@ export default function PoolDetail() {
         body: JSON.stringify({ vaultId: pool._id || id, amount: parseFloat(amount) }),
       });
       const data = await res.json();
-      if (data.status === 200) setQrData(data.data);
+      if (data.status === 200) setDepositModal({ qr: data.data });
       else toast.error(data.message || "Failed to generate QR");
     } catch { toast.error("Failed to generate QR"); }
     setLoading(false);
+  };
+
+  const handlePayFromInjectedWallet = async () => {
+    const qr = depositModal?.qr;
+    if (!qr) return;
+    if (expiresLeftMs === 0) {
+      toast.error("This deposit address has expired. Generate a new one.");
+      return;
+    }
+    setPayingInjected(true);
+    try {
+      toast.loading("Confirm transfer in your wallet…", { id: "pay-inj" });
+      await transferEphemeralFromInjected(qr, { walletType, connectInjectedWallet });
+      toast.success("Transfer confirmed. Your vault balance updates shortly.", { id: "pay-inj" });
+    } catch (err) {
+      const msg = err?.shortMessage || err?.reason || err?.message || "Transfer failed";
+      toast.error(msg, { id: "pay-inj", duration: 6000 });
+    }
+    setPayingInjected(false);
   };
 
   return (
@@ -588,104 +522,16 @@ export default function PoolDetail() {
               ))}
             </div>
 
-            {tab === "invest" ? (qrData ? (
-              <div className="text-center">
-                <div className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-4 mb-4">
-                  <div className="text-xs text-slate-500 mb-1">Deposit Amount</div>
-                  <div className="text-xl font-display font-bold text-brand">{qrData.amount} {qrData.asset}</div>
-                  <div className="text-xs text-slate-500 mt-1">on {qrData.network}</div>
-                </div>
-                {qrData.instructions?.length > 0 && (
-                  <div className="text-left space-y-2 mb-4">
-                    {qrData.instructions.map((inst, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs text-slate-400">
-                        <span className="text-brand mt-0.5">•</span><span>{inst}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => handlePayWithWallet("injected")}
-                  disabled={paying || !window.ethereum}
-                  title={!window.ethereum ? "Install a browser wallet extension to use this option" : undefined}
-                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20 mb-2 flex items-center justify-center gap-2"
-                >
-                  <span>🦊</span>
-                  {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with Wallet`}
-                </button>
-                <p className="text-[11px] text-slate-500 mb-3 text-center">Browser extension (e.g. MetaMask)</p>
-
-                <div className="flex items-center gap-3 my-4">
-                  <div className="flex-1 h-px bg-surface-4/60" />
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">or</span>
-                  <div className="flex-1 h-px bg-surface-4/60" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (walletType === "walletconnect" && account) {
-                      toast.success("Already connected with WalletConnect");
-                      return;
-                    }
-                    const addr = await connectWalletConnect();
-                    if (addr) toast.success("WalletConnect connected");
-                    else toast.error("WalletConnect connection failed");
-                  }}
-                  className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-white hover:shadow-lg hover:shadow-blue-500/20 mb-2 flex items-center justify-center gap-2"
-                >
-                  <span>🔗</span>
-                  {walletType === "walletconnect" ? "WalletConnect connected" : "Connect with WalletConnect"}
-                </button>
-
-                {walletType === "walletconnect" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await disconnectWallet();
-                        toast.success("WalletConnect disconnected");
-                      }}
-                      className="w-full py-2.5 rounded-xl text-sm font-semibold border border-surface-4/70 text-slate-400 hover:text-red-400 hover:border-red-500/35 hover:bg-red-500/5 mb-2 transition-colors"
-                    >
-                      Disconnect WalletConnect
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePayWithWallet("walletconnect")}
-                      disabled={paying}
-                      className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-[#6366f1] to-[#4f46e5] text-white hover:shadow-lg hover:shadow-indigo-500/20 mb-2 flex items-center justify-center gap-2"
-                    >
-                      <span>🔗</span>
-                      {paying ? "Waiting for wallet..." : `Pay ${qrData.amount} ${qrData.asset} with WalletConnect`}
-                    </button>
-                  </>
-                )}
-
-                <div className="text-[11px] text-slate-500 mb-3">
-                  Connect WalletConnect for a mobile wallet, then approve and sign the deposit. Browser wallet uses your extension directly.
-                </div>
-
-                {txHash && (
-                  <a href={`${Number(qrData.chainId) === 56 ? "https://bscscan.com" : "https://testnet.bscscan.com"}/tx/${txHash}`}
-                    target="_blank" rel="noreferrer"
-                    className="block text-xs text-brand hover:underline mb-3 break-all">
-                    View tx: {txHash.slice(0, 10)}…{txHash.slice(-8)} ↗
-                  </a>
-                )}
-
-                <button onClick={() => { setQrData(null); setTxHash(null); }}
-                  className="w-full py-3 rounded-xl font-semibold text-sm border border-surface-4/60 text-slate-300 hover:bg-[#0d1324]">
-                  Change amount
-                </button>
+            {tab === "invest" ? (depositModal ? (
+              <div className="rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 text-left">
+                <p className="font-display text-sm font-semibold text-slate-200">Deposit in progress</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">{DEPOSIT_STAY_WARNING}</p>
               </div>
             ) : (<>
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-400">Amount</span>
-                  <span className="text-slate-500">Deposit via QR scan or wallet transfer</span>
+                  <span className="text-slate-500">One-time address, valid 15 minutes</span>
                 </div>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">$</span>
@@ -720,6 +566,154 @@ export default function PoolDetail() {
           </div>
         </div>
       </div>
+
+      {modalQr &&
+        typeof document !== "undefined" &&
+        createPortal(
+        <>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deposit-modal-heading"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-8 sm:px-6"
+            onClick={beginCancelDeposit}
+          >
+            <div
+              className="glass relative w-full max-w-md max-h-[min(92vh,720px)] overflow-y-auto rounded-2xl shadow-2xl ring-1 ring-white/[0.06]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="border-b border-surface-4/50 px-5 pt-5 pb-4 text-center">
+                <h2 id="deposit-modal-heading" className="font-display text-lg font-semibold tracking-tight text-slate-100">
+                  Complete your deposit
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">{modalQr.network}</p>
+              </div>
+
+              <div className="px-5 pt-4">
+                <div className="flex gap-3 rounded-xl border border-brand/20 bg-brand/[0.06] px-3.5 py-3">
+                  <svg className="mt-0.5 h-5 w-5 shrink-0 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-5M12 8h.01" strokeLinecap="round" />
+                  </svg>
+                  <p className="text-left text-sm leading-relaxed text-slate-300">{DEPOSIT_STAY_WARNING}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 px-5 pb-5 pt-5">
+                <div className="flex justify-center">
+                  <img
+                    src={modalQr.qrCode}
+                    alt="Deposit address QR"
+                    className="h-48 w-48 rounded-xl border border-surface-4/60 bg-white p-2 shadow-inner sm:h-52 sm:w-52"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 text-center">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Send exactly</div>
+                  <div className="mt-1 font-display text-2xl font-bold text-brand">{modalQr.amount} {modalQr.asset}</div>
+                </div>
+
+                {expiresLeftMs != null && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-center text-sm font-semibold ${
+                      expiresLeftMs === 0
+                        ? "border-red-500/35 bg-red-500/[0.08] text-red-300"
+                        : "border-surface-4/50 bg-[#0d1324] text-slate-300"
+                    }`}
+                  >
+                    {expiresLeftMs === 0 ? (
+                      "This deposit address has expired. Close and start again."
+                    ) : (
+                      <>
+                        <span className="text-slate-500">Time remaining </span>
+                        <span className="font-mono text-brand">{formatRemaining(expiresLeftMs)}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-surface-4/50 bg-[#0d1324] p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">One-time address</div>
+                  <div className="mt-2 break-all font-mono text-sm text-slate-200">{modalQr.depositAddress}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(modalQr.depositAddress);
+                      toast.success("Address copied");
+                    }}
+                    className="mt-3 text-xs font-semibold text-brand hover:text-brand-light"
+                  >
+                    Copy address
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 py-1">
+                  <div className="h-px flex-1 bg-surface-4/50" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">or pay from wallet</span>
+                  <div className="h-px flex-1 bg-surface-4/50" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handlePayFromInjectedWallet}
+                  disabled={payingInjected || expiresLeftMs === 0 || !window.ethereum}
+                  title={!window.ethereum ? "Install MetaMask or another EVM wallet extension" : undefined}
+                  className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3.5 font-display text-base font-bold text-white shadow-lg shadow-brand/10 transition-all hover:shadow-brand/25 disabled:opacity-50"
+                >
+                  {payingInjected ? "Waiting for wallet…" : `Pay ${modalQr.amount} ${modalQr.asset}`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={beginCancelDeposit}
+                  className="w-full rounded-xl border border-surface-4/60 py-3 text-sm font-semibold text-slate-400 transition-colors hover:border-slate-500 hover:bg-[#0d1324] hover:text-slate-200"
+                >
+                  Cancel deposit
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {depositCancelConfirm && (
+            <div
+              className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+              role="presentation"
+              onClick={dismissCancelConfirm}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="deposit-cancel-title"
+                className="glass w-full max-w-sm rounded-2xl p-5 shadow-2xl ring-1 ring-white/[0.06]"
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 id="deposit-cancel-title" className="font-display text-base font-semibold text-slate-100">
+                  Cancel this deposit?
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-400">{DEPOSIT_STAY_WARNING}</p>
+                <div className="mt-5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={dismissCancelConfirm}
+                    className="flex-1 rounded-xl border border-surface-4/60 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-[#0d1324]"
+                  >
+                    Keep deposit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelSubmitting}
+                    onClick={executeCancelDeposit}
+                    className="flex-1 rounded-xl border border-red-500/40 bg-red-500/10 py-2.5 text-sm font-semibold text-red-200 transition-colors hover:bg-red-500/15 disabled:opacity-50"
+                  >
+                    {cancelSubmitting ? "…" : "Yes, cancel"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>,
+        document.body
+      )}
     </div>
   );
 }
