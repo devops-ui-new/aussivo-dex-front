@@ -5,6 +5,15 @@ import toast from "react-hot-toast";
 
 import { API } from "../config/api";
 
+/** Enough precision that small vault accruals aren’t shown as $0.00 in the Yield card */
+function formatYieldBalanceUsd(n) {
+  const x = Number(n) || 0;
+  if (x === 0) return "0.00";
+  if (Math.abs(x) < 0.01) return x.toFixed(6);
+  if (Math.abs(x) < 1) return x.toFixed(4);
+  return x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function LockCountdown({ unlockAt }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -139,7 +148,9 @@ export default function Portfolio() {
         </div>
         <div className="glass p-5">
           <div className="text-xs text-muted mb-1 uppercase tracking-wider">Yield</div>
-          <div className="text-2xl font-display font-bold text-brand">${(user?.yieldWalletUSDT || 0).toFixed(2)}</div>
+          <div className="text-2xl font-display font-bold text-brand">
+            ${formatYieldBalanceUsd(user?.yieldWalletUSDT)}
+          </div>
           {(user?.yieldWalletUSDT || 0) > 0 && (
             <button onClick={() => handleWithdraw(user.yieldWalletUSDT, "USDT", "yield")}
               className="text-xs text-brand mt-2 hover:underline">Withdraw →</button>
@@ -225,7 +236,7 @@ export default function Portfolio() {
                       {loading === d._id ? "..." : "Redeem →"}
                     </button>
                   )}
-                  <div className="text-xs text-muted mt-1">
+                  <div className="text-xs font-mono font-semibold text-yellow-400 mt-1">
                     +${estYieldGeneratedCapped.toFixed(6)} earned
                   </div>
                   <div className="text-[11px] text-muted mt-0.5">

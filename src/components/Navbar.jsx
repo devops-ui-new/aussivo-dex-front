@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AuthModal from "./AuthModal";
 import brandLogo from "../assets/branding/logo-aussivo.png";
 
@@ -19,6 +19,8 @@ export default function Navbar() {
   const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => { if (isLoggedIn) setShowAuth(false); }, [isLoggedIn]);
+
+  const closeAuth = useCallback(() => setShowAuth(false), []);
 
   const handleConnect = async () => {
     const addr = await connectWallet();
@@ -84,7 +86,7 @@ export default function Navbar() {
         </div>
       </header>
 
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showAuth && <AuthModal onClose={closeAuth} />}
       <style>{`@keyframes modalIn { from { opacity:0; transform:scale(0.95) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
     </>
   );

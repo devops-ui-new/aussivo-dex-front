@@ -202,6 +202,27 @@ export function Web3Provider({ children }) {
     return data;
   };
 
+  /** Returning users: wallet already linked → JWT without email OTP */
+  const loginWithWallet = useCallback(async (walletAddress) => {
+    if (!walletAddress) return { ok: false, needsRegistration: false };
+    const res = await fetch(`${API}/api/user/wallet-auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress }),
+    });
+    const data = await res.json();
+    if (data.status === 200 && data.data?.registered === true && data.data?.token) {
+      setToken(data.data.token);
+      setUser(data.data.user);
+      localStorage.setItem("aussivo_token", data.data.token);
+      return { ok: true, needsRegistration: false };
+    }
+    if (data.status === 200 && data.data?.registered === false) {
+      return { ok: false, needsRegistration: true };
+    }
+    return { ok: false, needsRegistration: false, error: data.message };
+  }, []);
+
   const refreshUser = async () => {
     if (!token) return;
     const res = await fetch(`${API}/api/user/me`, { headers: { Authorization: `Bearer ${token}` } });
@@ -319,7 +340,7 @@ export function Web3Provider({ children }) {
       walletProvider, walletType,
       isLoggedIn,
       getActiveProvider,
-      connectWallet, connectInjectedWallet, disconnect, sendOTP, verifyOTP, refreshUser, linkWallet, API,
+      connectWallet, connectInjectedWallet, disconnect, sendOTP, verifyOTP, loginWithWallet, refreshUser, linkWallet, API,
       contracts: null,
       config: null,
     }}>
