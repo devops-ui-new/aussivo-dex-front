@@ -132,24 +132,16 @@ export default function Portfolio() {
       <p className="text-muted mb-8">Your deposits, yield earnings, and balances</p>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <div className="glass p-5">
           <div className="text-xs text-muted mb-1 uppercase tracking-wider">Total Deposited</div>
           <div className="text-2xl font-display font-bold">${totalStaked.toLocaleString()}</div>
         </div>
         <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Yield (USDT)</div>
+          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Yield</div>
           <div className="text-2xl font-display font-bold text-brand">${(user?.yieldWalletUSDT || 0).toFixed(2)}</div>
           {(user?.yieldWalletUSDT || 0) > 0 && (
             <button onClick={() => handleWithdraw(user.yieldWalletUSDT, "USDT", "yield")}
-              className="text-xs text-brand mt-2 hover:underline">Withdraw →</button>
-          )}
-        </div>
-        <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Yield (USDC)</div>
-          <div className="text-2xl font-display font-bold text-brand">${(user?.yieldWalletUSDC || 0).toFixed(2)}</div>
-          {(user?.yieldWalletUSDC || 0) > 0 && (
-            <button onClick={() => handleWithdraw(user.yieldWalletUSDC, "USDC", "yield")}
               className="text-xs text-brand mt-2 hover:underline">Withdraw →</button>
           )}
         </div>
