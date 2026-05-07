@@ -1,0 +1,85 @@
+name: Deploy Frontend to Production
+
+on:
+  push:
+    branches:
+      - prod
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: aussivo-dex-front
+  ECS_SERVICE: aussivo-dex-front-service
+  ECS_CLUSTER: aussivo-dex-cluster
+  CONTAINER_NAME: aussivo-dex-front
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Fetch frontend secrets from AWS Secrets Manager
+        id: secrets
+        run: |
+          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id aussivo-dex-front-prod --query SecretString --output text)
+          echo "VITE_API_URL=$(echo $SECRET_JSON | jq -r '.VITE_API_URL')" >> $GITHUB_ENV
+          echo "VITE_WALLETCONNECT_PROJECT_ID=$(echo $SECRET_JSON | jq -r '.VITE_WALLETCONNECT_PROJECT_ID')" >> $GITHUB_ENV
+          echo "VITE_DEBRIDGE_REF=$(echo $SECRET_JSON | jq -r '.VITE_DEBRIDGE_REF')" >> $GITHUB_ENV
+          echo "VITE_DEBRIDGE_AFFILIATE_ADDR=$(echo $SECRET_JSON | jq -r '.VITE_DEBRIDGE_AFFILIATE_ADDR')" >> $GITHUB_ENV
+          echo "VITE_DEBRIDGE_AFFILIATE_PCT=$(echo $SECRET_JSON | jq -r '.VITE_DEBRIDGE_AFFILIATE_PCT')" >> $GITHUB_ENV
+
+      - name: Build, tag, and push Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg VITE_API_URL=$VITE_API_URL \
+            --build-arg VITE_WALLETCONNECT_PROJECT_ID=$VITE_WALLETCONNECT_PROJECT_ID \
+            --build-arg VITE_DEBRIDGE_REF=$VITE_DEBRIDGE_REF \
+            --build-arg VITE_DEBRIDGE_AFFILIATE_ADDR=$VITE_DEBRIDGE_AFFILIATE_ADDR \
+            --build-arg VITE_DEBRIDGE_AFFILIATE_PCT=$VITE_DEBRIDGE_AFFILIATE_PCT \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.CONTAINER_NAME }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Update ECS task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
