@@ -5,7 +5,7 @@ import { useParams, Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
-import { DEPOSIT_STAY_WARNING } from "../constants/depositModalCopy";
+import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
 function formatRemaining(ms) {
   if (ms <= 0) return "0:00";
@@ -611,6 +611,7 @@ export default function PoolDetail() {
                 <div className="rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 text-center">
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Send exactly</div>
                   <div className="mt-1 font-display text-2xl font-bold text-brand">{modalQr.amount} {modalQr.asset}</div>
+                  <p className="mt-3 text-left text-xs leading-relaxed text-amber-200/90">{DEPOSIT_SINGLE_TX_HINT}</p>
                 </div>
 
                 {expiresLeftMs != null && (
