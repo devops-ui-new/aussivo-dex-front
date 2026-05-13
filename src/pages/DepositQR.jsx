@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { API } from "../config/api";
 import { useWeb3 } from "../context/Web3Context";
 import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
-import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
+import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT, DEPOSIT_PORTFOLIO_NOTICE } from "../constants/depositModalCopy";
 
 function formatRemaining(ms) {
   if (ms <= 0) return "0:00";
@@ -271,6 +271,7 @@ export default function DepositQR() {
           <div className="rounded-xl border border-surface-4/50 bg-surface-2/40 p-4 text-left">
             <p className="font-display text-sm font-semibold text-slate-200">Deposit in progress</p>
             <p className="mt-2 text-xs leading-relaxed text-muted">{DEPOSIT_STAY_WARNING}</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">{DEPOSIT_PORTFOLIO_NOTICE}</p>
           </div>
         )}
       </div>
@@ -303,7 +304,10 @@ export default function DepositQR() {
                     <circle cx="12" cy="12" r="10" />
                     <path d="M12 16v-5M12 8h.01" strokeLinecap="round" />
                   </svg>
-                  <p className="text-left text-sm leading-relaxed text-slate-300">{DEPOSIT_STAY_WARNING}</p>
+                  <div className="min-w-0 flex-1 space-y-2 text-left text-sm leading-relaxed text-slate-300">
+                    <p>{DEPOSIT_STAY_WARNING}</p>
+                    <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">{DEPOSIT_PORTFOLIO_NOTICE}</p>
+                  </div>
                 </div>
               </div>
 
@@ -398,7 +402,10 @@ export default function DepositQR() {
                 <h3 id="deposit-qr-cancel-title" className="font-display text-base font-semibold text-slate-100">
                   Cancel this deposit?
                 </h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-400">{DEPOSIT_STAY_WARNING}</p>
+                <div className="mt-3 space-y-2 text-sm leading-relaxed text-slate-400">
+                  <p>{DEPOSIT_STAY_WARNING}</p>
+                  <p className="text-xs text-slate-500">{DEPOSIT_PORTFOLIO_NOTICE}</p>
+                </div>
                 <div className="mt-5 flex gap-3">
                   <button
                     type="button"

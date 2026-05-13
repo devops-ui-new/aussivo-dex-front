@@ -5,3 +5,7 @@ export const DEPOSIT_STAY_WARNING =
 /** Shown under “Send exactly” in the QR deposit modal. */
 export const DEPOSIT_SINGLE_TX_HINT =
   "Use exactly one transfer to this address. Do not split or send a second transaction to top up.";
+
+/** Timing for when funds show in Portfolio (matches backend deposit window + finalization). */
+export const DEPOSIT_PORTFOLIO_NOTICE =
+  "Your deposit will appear in Portfolio after about 15 minutes — when your deposit window closes and we finalize the amount.";
