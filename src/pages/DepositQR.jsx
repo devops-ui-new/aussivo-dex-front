@@ -58,9 +58,9 @@ export default function DepositQR() {
             {amount && parseFloat(amount) > 0 && (
               <div className="bg-surface-2/50 rounded-xl p-4 mb-6 border border-surface-4/30">
                 <div className="flex justify-between text-sm mb-1"><span className="text-muted">Monthly Yield</span>
-                  <span className="text-brand font-semibold">+${(parseFloat(amount) * (vault.tiers?.[0]?.apyPercent || 1) / 100).toFixed(2)}</span></div>
+                  <span className="text-brand font-semibold">+${(parseFloat(amount) * ((vault.tiers?.[0]?.apyPercent)/12 || 1) / 100).toFixed(2)}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-muted">APY</span>
-                  <span className="font-semibold">{vault.tiers?.[0]?.apyPercent || "—"}% /mo</span></div>
+                  <span className="font-semibold">{(vault.tiers?.[0]?.apyPercent)/12 || "—"}% /mo</span></div>
               </div>
             )}
             <button onClick={generateQR} disabled={loading} className="btn-primary w-full py-4 text-base disabled:opacity-50">
