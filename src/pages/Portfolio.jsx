@@ -36,6 +36,67 @@ function LockCountdown({ unlockAt }) {
   );
 }
 
+/**
+ * Live, per-second yield view for one deposit.
+ *  • "earning" = continuous real-time estimate (accrues every second toward the
+ *    30-day amount), capped at the deposit's full term.
+ *  • "Withdrawable (paid)" = what the 30-day cron has actually credited and the
+ *    user can withdraw now.
+ *  • "Next payout in" = countdown to this deposit's next 30-day mark, when the
+ *    accruing amount becomes credited & withdrawable.
+ * apyPercent is the ANNUAL APY %; monthly = annual / 12; hourly = monthly / (30·24).
+ */
+function LiveYield({ deposit }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
+  const amount = Number(deposit.amount || 0);
+  const monthlyYield = (amount * (Number(deposit.apyPercent || 0) / 12)) / 100;
+  const perHour = monthlyYield / (30 * 24);
+
+  const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
+  const elapsedMs = Math.max(0, now - createdMs);
+  const maxPayments = Number(deposit.maxYieldPayments || 0);
+
+  const maxTotal = monthlyYield * maxPayments;
+  const accruedRaw = monthlyYield * (elapsedMs / CYCLE_MS);
+  const accrued = maxPayments ? Math.min(accruedRaw, maxTotal) : accruedRaw;
+
+  const paid = Number(deposit.totalYieldPaid || 0);
+  const pending = Math.max(0, accrued - paid); // accrued but not yet credited (current cycle)
+
+  const cyclesDone = Math.floor(elapsedMs / CYCLE_MS);
+  const matured = maxPayments > 0 && cyclesDone >= maxPayments;
+  const msToNext = Math.max(0, createdMs + (cyclesDone + 1) * CYCLE_MS - now);
+  const dd = Math.floor(msToNext / 86400000);
+  const hh = Math.floor((msToNext % 86400000) / 3600000);
+  const mm = Math.floor((msToNext % 3600000) / 60000);
+  const ss = Math.floor((msToNext % 60000) / 1000);
+
+  const live = amount > 0 && monthlyYield > 0;
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      <div className="text-xs font-mono font-semibold text-yellow-400">
+        +${accrued.toFixed(6)} earning
+      </div>
+      <div className="text-[11px] text-muted">
+        Withdrawable (paid): <span className="text-slate-300">+${paid.toFixed(2)}</span>
+      </div>
+      <div className="text-[11px] text-muted">
+        {live ? <>≈ ${perHour.toFixed(8)}/hr · +${pending.toFixed(6)} accruing this cycle</> : <>≈ —</>}
+      </div>
+      <div className="text-[11px] text-emerald-400/80">
+        {matured ? "Term complete" : <>Next payout in {dd}d {String(hh).padStart(2, "0")}h {String(mm).padStart(2, "0")}m {String(ss).padStart(2, "0")}s</>}
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();
   const [deposits, setDeposits] = useState([]);
@@ -191,22 +252,9 @@ export default function Portfolio() {
             const isLocked = lockDate && lockDate > new Date();
             const vaultId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
             const vaultName = d.vaultId?.name || "Vault";
-            const annualApy = Number(d.poolApy ?? (d.apyPercent || 0) * 12).toFixed(1);
-            const monthlyApy = Number(d.poolApyMonthly ?? d.apyPercent ?? 0);
-            const createdAt = d.createdAt ? new Date(d.createdAt) : null;
-            const hoursElapsed = createdAt ? (nowTs - createdAt.getTime()) / 3600000 : 0;
-            // `apyPercent` on the deposit is the monthly APY percent (used by the backend monthly cron).
-            // We linearly accrue the same monthly yield across hours for a smoother "generated till now" UX.
-            const apyMonthlyPercent = Number(d.apyPercent || 0);
-            const amountNum = Number(d.amount || 0);
-            const hoursPerMonth = 30 * 24;
-            const monthlyYield = amountNum * apyMonthlyPercent / 100; // approx amount paid per "month" used by backend cron
-            const estYieldGenerated = hoursElapsed > 0 ? monthlyYield * (hoursElapsed / hoursPerMonth) : 0;
-            const maxEstYieldGenerated = monthlyYield * (Number(d.maxYieldPayments || 0));
-            const estYieldGeneratedCapped = d.maxYieldPayments
-              ? Math.min(estYieldGenerated, maxEstYieldGenerated)
-              : estYieldGenerated;
-            const estYieldPerHour = hoursPerMonth > 0 ? (monthlyYield / hoursPerMonth) : 0;
+            const annualApy = Number(d.poolApy ?? (d.apyPercent || 0)).toFixed(1);
+            const monthlyApy = Number(d.poolApyMonthly ?? ((d.apyPercent || 0) / 12));
+            // Live accrual + 30-day payout countdown are handled by <LiveYield/> below.
             return (
               <div key={i} className="glass p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -220,7 +268,7 @@ export default function Portfolio() {
                       <div className="font-semibold">{vaultName}</div>
                     )}
                     <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
-                    <div className="text-xs text-muted mt-0.5">Yield paid: {d.yieldPaymentsCount}/{d.maxYieldPayments} months</div>
+                    <div className="text-xs text-muted mt-0.5">Yield paid: {d.yieldPaymentsCount}/{d.maxYieldPayments} cycles (every 30 days)</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -236,21 +284,7 @@ export default function Portfolio() {
                       {loading === d._id ? "..." : "Redeem →"}
                     </button>
                   )}
-                  <div className="text-xs font-mono font-semibold text-yellow-400 mt-1">
-                    +${estYieldGeneratedCapped.toFixed(6)} earned
-                  </div>
-                  <div className="text-[11px] text-muted mt-0.5">
-                    Paid so far: +${Number(d.totalYieldPaid || 0).toFixed(2)}
-                  </div>
-                  <div className="text-[11px] text-muted mt-0.5">
-                    {hoursElapsed > 0 && apyMonthlyPercent > 0 && amountNum > 0 ? (
-                      <>
-                        Generated (est.): +${estYieldGeneratedCapped.toFixed(6)} · ≈ ${estYieldPerHour.toFixed(8)}/hr
-                      </>
-                    ) : (
-                      <>Generated (est.): —</>
-                    )}
-                  </div>
+                  <LiveYield deposit={d} />
                 </div>
               </div>
             );

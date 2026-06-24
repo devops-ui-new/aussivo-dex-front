@@ -64,17 +64,23 @@ async function ensureInjectedChain(ethProvider, targetChainId) {
  * ERC-20 transfer from injected wallet to ephemeral deposit address (same as QR flow).
  * @param {object} qrData API deposit/qr payload
  * @param {{ walletType: string | null, connectInjectedWallet: () => Promise<string | null> }} web3
+ * @param {string} [overrideBaseUnits] Optional token base-units to send (used for open-amount
+ *        deposits where the user types the amount in-app instead of pre-specifying it).
  * @returns {Promise<string>} transaction hash
  */
-export async function transferEphemeralFromInjected(qrData, { walletType, connectInjectedWallet }) {
+export async function transferEphemeralFromInjected(qrData, { walletType, connectInjectedWallet }, overrideBaseUnits) {
   if (!window.ethereum) {
     throw new Error("No browser wallet. Install MetaMask or another EVM extension.");
   }
-  const rawUnits = qrData.amountInBaseUnits != null && String(qrData.amountInBaseUnits).trim() !== ""
+  const override = overrideBaseUnits != null && String(overrideBaseUnits).trim() !== "" && String(overrideBaseUnits) !== "0"
+    ? String(overrideBaseUnits).trim()
+    : null;
+  const fromQr = qrData.amountInBaseUnits != null && String(qrData.amountInBaseUnits).trim() !== "" && String(qrData.amountInBaseUnits) !== "0"
     ? String(qrData.amountInBaseUnits).trim()
     : null;
+  const rawUnits = override || fromQr;
   if (!rawUnits) {
-    throw new Error("Missing amount from server. Regenerate the deposit.");
+    throw new Error("Enter an amount to pay from your wallet — or scan the QR and send any amount from your wallet app.");
   }
 
   if (walletType !== "injected") {

@@ -30,9 +30,10 @@ const EMPTY_FORM = {
   smartContractLabel: "Verified ✓",
   circuitBreakerLabel: "Active ✓",
   tiers: [
-    { minAmount: 50, maxAmount: 5000, apyPercent: 1 },
-    { minAmount: 5000, maxAmount: 50000, apyPercent: 1.25 },
-    { minAmount: 50000, maxAmount: 1000000, apyPercent: 1.5 }
+    // Tier apyPercent values are ANNUAL % (cron pays apyPercent/12 monthly).
+    { minAmount: 50, maxAmount: 5000, apyPercent: 12 },
+    { minAmount: 5000, maxAmount: 50000, apyPercent: 15 },
+    { minAmount: 50000, maxAmount: 1000000, apyPercent: 18 }
   ],
   strategies: [
     { name: "Aave V3", allocation: 40, protocol: "aave", color: "#B6509E", apy: "4.2%", status: "Active" },
@@ -184,7 +185,7 @@ export default function AdminVaults() {
           <div><label className="text-xs text-muted mb-1 block">Description</label><input value={form.description} onChange={e => set("description", e.target.value)} className="input-field text-sm" /></div>
 
           <div>
-            <label className="text-xs text-muted mb-2 block">APY Tiers</label>
+            <label className="text-xs text-muted mb-2 block">APY Tiers — enter <span className="text-brand">ANNUAL</span> APY % (paid as APY/12 each month)</label>
             {form.tiers.map((t, i) => (
               <div key={i} className="flex gap-2 mb-2 items-center">
                 <input type="number" placeholder="Min $" value={t.minAmount} onChange={e => { const tiers = [...form.tiers]; tiers[i].minAmount = +e.target.value; set("tiers", tiers); }} className="input-field text-sm flex-1" />

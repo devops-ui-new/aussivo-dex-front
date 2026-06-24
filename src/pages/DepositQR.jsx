@@ -20,7 +20,8 @@ export default function DepositQR() {
   const { vaultId } = useParams();
   const { connectInjectedWallet, walletType, token } = useWeb3();
   const [vault, setVault] = useState(null);
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState("");       // optional — estimate only
+  const [payAmount, setPayAmount] = useState(""); // optional — amount for in-app "pay from wallet"
   const [depositModal, setDepositModal] = useState(null);
   const [depositCancelConfirm, setDepositCancelConfirm] = useState(false);
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
@@ -195,18 +196,18 @@ export default function DepositQR() {
   }, [depositModal?.qr?.pendingDepositId, token, API]);
 
   const generateQR = async () => {
-    if (!amount || parseFloat(amount) <= 0) { toast.error("Enter an amount"); return; }
     setLoading(true);
     try {
       const authToken = localStorage.getItem("aussivo_token");
+      // Open-amount: no amount sent. User scans and sends any amount from their wallet.
       const res = await fetch(`${API}/api/user/deposit/qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ vaultId, amount: parseFloat(amount) }),
+        body: JSON.stringify({ vaultId }),
       });
       const data = await res.json();
-      if (data.status === 200) setDepositModal({ qr: data.data });
-      else toast.error(data.message);
+      if (data.status === 200) { setDepositModal({ qr: data.data }); setPayAmount(""); }
+      else toast.error(data.message || "Failed to generate deposit address");
     } catch { toast.error("Failed to generate deposit address"); }
     setLoading(false);
   };
@@ -218,10 +219,16 @@ export default function DepositQR() {
       toast.error("This deposit address has expired.");
       return;
     }
+    let overrideBaseUnits;
+    if (qr.openAmount) {
+      const amt = parseFloat(payAmount);
+      if (!amt || amt <= 0) { toast.error("Enter an amount to pay from your wallet"); return; }
+      overrideBaseUnits = (BigInt(Math.round(amt * 1e6)) * BigInt(1e12)).toString();
+    }
     setPayingInjected(true);
     try {
       toast.loading("Confirm transfer in your wallet…", { id: "pay-inj" });
-      await transferEphemeralFromInjected(qr, { walletType, connectInjectedWallet });
+      await transferEphemeralFromInjected(qr, { walletType, connectInjectedWallet }, overrideBaseUnits);
       toast.success("Transfer confirmed. Your vault balance updates shortly.", { id: "pay-inj" });
     } catch (err) {
       const msg = err?.shortMessage || err?.reason || err?.message || "Transfer failed";
@@ -246,25 +253,23 @@ export default function DepositQR() {
         {!depositModal ? (
           <>
             <div className="mb-6">
-              <label className="text-sm text-muted mb-2 block">Deposit Amount ({vault.asset})</label>
+              <label className="text-sm text-muted mb-2 block">Estimate your yield <span className="text-slate-500">(optional)</span></label>
               <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                placeholder={`Min: $${vault.minDeposit}`}
+                placeholder={`Amount of ${vault.asset}`}
                 className="input-field text-lg font-display font-semibold" />
-              <div className="flex justify-between text-xs text-muted mt-2">
-                <span>Min: ${vault.minDeposit}</span>
-                <span>Max: ${vault.maxDeposit}</span>
-              </div>
+              <div className="text-xs text-muted mt-2">No amount needed to deposit — you'll send any amount from your wallet on the next screen.</div>
             </div>
             {amount && parseFloat(amount) > 0 && (
               <div className="bg-surface-2/50 rounded-xl p-4 mb-6 border border-surface-4/30">
+                {/* Tier apyPercent is ANNUAL; monthly yield = principal * (annual/12) / 100 */}
                 <div className="flex justify-between text-sm mb-1"><span className="text-muted">Monthly Yield</span>
-                  <span className="text-brand font-semibold">+${(parseFloat(amount) * (vault.tiers?.[0]?.apyPercent || 1) / 100).toFixed(2)}</span></div>
+                  <span className="text-brand font-semibold">+${(parseFloat(amount) * ((vault.tiers?.[0]?.apyPercent || 0) / 12) / 100).toFixed(2)}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-muted">APY</span>
-                  <span className="font-semibold">{vault.tiers?.[0]?.apyPercent || "—"}% /mo</span></div>
+                  <span className="font-semibold">{vault.tiers?.[0]?.apyPercent != null ? `${vault.tiers[0].apyPercent}% APY (${(vault.tiers[0].apyPercent / 12).toFixed(2)}% /mo)` : "—"}</span></div>
               </div>
             )}
             <button onClick={generateQR} disabled={loading} className="btn-primary w-full py-4 text-base disabled:opacity-50">
-              {loading ? "Generating..." : "Get deposit address"}
+              {loading ? "Generating..." : "Get deposit address →"}
             </button>
           </>
         ) : (
@@ -321,8 +326,18 @@ export default function DepositQR() {
                 </div>
 
                 <div className="rounded-xl border border-surface-4/50 bg-surface-2/40 p-4 text-center">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted">Send exactly</div>
-                  <div className="mt-1 font-display text-2xl font-bold text-brand">{modalQr.amount} {modalQr.asset}</div>
+                  {modalQr.openAmount ? (
+                    <>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted">Send any amount of</div>
+                      <div className="mt-1 font-display text-2xl font-bold text-brand">{modalQr.asset}</div>
+                      <p className="mt-2 text-xs text-muted">Scan the QR or copy the address and send {modalQr.asset} from your wallet. Whatever you send is captured and credited automatically.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted">Send exactly</div>
+                      <div className="mt-1 font-display text-2xl font-bold text-brand">{modalQr.amount} {modalQr.asset}</div>
+                    </>
+                  )}
                   <p className="mt-3 text-left text-xs leading-relaxed text-amber-200/90">{DEPOSIT_SINGLE_TX_HINT}</p>
                 </div>
 
@@ -366,13 +381,27 @@ export default function DepositQR() {
                   <div className="h-px flex-1 bg-surface-4/50" />
                 </div>
 
+                {modalQr.openAmount && (
+                  <input
+                    type="number"
+                    value={payAmount}
+                    onChange={e => setPayAmount(e.target.value)}
+                    placeholder={`Amount of ${modalQr.asset} to send`}
+                    className="input-field w-full text-sm font-semibold"
+                  />
+                )}
+
                 <button
                   type="button"
                   onClick={handlePayFromInjectedWallet}
-                  disabled={payingInjected || expiresLeftMs === 0 || !window.ethereum}
+                  disabled={payingInjected || expiresLeftMs === 0 || !window.ethereum || (modalQr.openAmount && !(parseFloat(payAmount) > 0))}
                   className="btn-primary w-full rounded-xl py-3.5 text-base font-display font-bold disabled:opacity-50"
                 >
-                  {payingInjected ? "Waiting for wallet…" : `Pay ${modalQr.amount} ${modalQr.asset}`}
+                  {payingInjected
+                    ? "Waiting for wallet…"
+                    : modalQr.openAmount
+                    ? `Pay ${parseFloat(payAmount) > 0 ? payAmount : ""} ${modalQr.asset}`.trim()
+                    : `Pay ${modalQr.amount} ${modalQr.asset}`}
                 </button>
 
                 <button
