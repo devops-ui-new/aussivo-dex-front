@@ -69,8 +69,8 @@ export default function AdminDashboard() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="1.8"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
             </div>
             <div>
-              <h3 className="font-display font-bold text-base text-white">APY Distribution (30-day cycles)</h3>
-              <p className="text-xs text-muted mt-0.5">Credits each deposit that has completed a 30-day cycle + referral commissions (L1: 0.35%, L2: 0.15%). Runs automatically every day.</p>
+              <h3 className="font-display font-bold text-base text-white">APY Distribution (continuous accrual)</h3>
+              <p className="text-xs text-muted mt-0.5">Settles accrued yield for every active deposit + referral commissions (L1: 0.35%, L2: 0.15%). Yield accrues continuously and is withdrawable anytime; this just keeps balances fresh. Runs daily.</p>
             </div>
           </div>
           <button onClick={() => { setShowApyModal(true); setApyResult(null); setApyConfig({ distributeAll: true, vaultId: "", customPercent: "", confirmText: "" }); }}
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
                     <div className="flex justify-between text-sm"><span className="text-muted">APY Rate</span><span className="text-white font-medium">Per-tier (as configured in vault)</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted">Referral L1</span><span className="text-brand font-medium">0.35% of yield</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted">Referral L2</span><span className="text-blue-400 font-medium">0.15% of yield</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-muted">Guard</span><span className="text-muted">Only pays deposits past their next 30-day mark</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted">Guard</span><span className="text-muted">Credits each deposit its newly-accrued yield since last run</span></div>
                   </div>
 
                   {/* Danger Zone Confirmation */}

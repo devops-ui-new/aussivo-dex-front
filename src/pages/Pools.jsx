@@ -9,9 +9,26 @@ export default function Pools() {
   const [sort, setSort] = useState("popularity");
   const [search, setSearch] = useState("");
 
+  // Demo mode: gently animate sample metrics upward so the walkthrough feels live.
+  // Off by default; when on, a visible "Sample data" badge is shown (see below).
+  const DEMO = import.meta.env.VITE_DEMO_MODE === "true";
+
   useEffect(() => {
     fetch(`${API}/api/pools`).then(r => r.json()).then(setPools).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!DEMO) return;
+    const t = setInterval(() => {
+      setPools(prev => prev.map(p => {
+        // small, bounded, never-decreasing drift (illustrative only)
+        const users = Number(p.totalUsers || 0) + (Math.random() < 0.5 ? Math.floor(Math.random() * 2) : 0);
+        const staked = Number(p.total_staked ?? p.totalStaked ?? 0) * (1 + Math.random() * 0.0006);
+        return { ...p, totalUsers: users, total_staked: staked, totalStaked: staked };
+      }));
+    }, 5000);
+    return () => clearInterval(t);
+  }, [DEMO]);
 
   let filtered = pools.filter(p => {
     if (!p.active) return false;
@@ -30,6 +47,11 @@ export default function Pools() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
       <h1 className="font-display font-bold text-3xl text-white mb-2">Yield Vaults</h1>
+      {DEMO && (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300 mb-3">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> Sample data — illustrative demo
+        </span>
+      )}
       <p className="text-slate-400 mb-8 max-w-xl">
         Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
       </p>

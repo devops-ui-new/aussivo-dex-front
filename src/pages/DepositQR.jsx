@@ -252,22 +252,12 @@ export default function DepositQR() {
 
         {!depositModal ? (
           <>
-            <div className="mb-6">
-              <label className="text-sm text-muted mb-2 block">Estimate your yield <span className="text-slate-500">(optional)</span></label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                placeholder={`Amount of ${vault.asset}`}
-                className="input-field text-lg font-display font-semibold" />
-              <div className="text-xs text-muted mt-2">No amount needed to deposit — you'll send any amount from your wallet on the next screen.</div>
+            <div className="mb-6 rounded-xl border border-surface-4/40 bg-surface-2/40 p-4">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Tap below to get your one-time deposit address, then send <span className="font-semibold text-slate-100">any amount</span> of {vault.asset} from your wallet. Whatever you send is captured and credited automatically — no amount to enter.
+              </p>
+              <div className="mt-2 text-xs text-muted">One-time address, valid 60 min.</div>
             </div>
-            {amount && parseFloat(amount) > 0 && (
-              <div className="bg-surface-2/50 rounded-xl p-4 mb-6 border border-surface-4/30">
-                {/* Tier apyPercent is ANNUAL; monthly yield = principal * (annual/12) / 100 */}
-                <div className="flex justify-between text-sm mb-1"><span className="text-muted">Monthly Yield</span>
-                  <span className="text-brand font-semibold">+${(parseFloat(amount) * ((vault.tiers?.[0]?.apyPercent || 0) / 12) / 100).toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-muted">APY</span>
-                  <span className="font-semibold">{vault.tiers?.[0]?.apyPercent != null ? `${vault.tiers[0].apyPercent}% APY (${(vault.tiers[0].apyPercent / 12).toFixed(2)}% /mo)` : "—"}</span></div>
-              </div>
-            )}
             <button onClick={generateQR} disabled={loading} className="btn-primary w-full py-4 text-base disabled:opacity-50">
               {loading ? "Generating..." : "Get deposit address →"}
             </button>

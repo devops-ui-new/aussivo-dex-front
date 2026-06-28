@@ -5,6 +5,7 @@ import { useParams, Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
+import { sampleSeries } from "../utils/sampleSeries";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
 function formatRemaining(ms) {
@@ -38,60 +39,46 @@ function DonutChart({ strategies }) {
   );
 }
 
-function MiniChart({ seed = "0", apy = 18 }) {
-  const points = useMemo(() => {
-    const target = Number(apy) || 0;
-    // Hash the string seed so we get a stable numeric seed from a Mongo ObjectId.
-    let h = 2166136261;
-    const str = String(seed);
-    for (let i = 0; i < str.length; i++) h = ((h ^ str.charCodeAt(i)) * 16777619) >>> 0;
-    let s = h || 1;
-    const rand = () => {
-      s = (s * 9301 + 49297) % 233280;
-      return s / 233280;
-    };
-    const p = [];
-    const ceiling = Math.max(target, 1);
-    let val = target * 0.1;
-    for (let i = 0; i < 30; i++) {
-      val += (rand() - 0.1) * (ceiling / 12);
-      val = Math.max(0, Math.min(ceiling, val));
-      p.push(val);
-    }
-    p[p.length - 1] = target;
-    return p;
-  }, [seed, apy]);
+function MiniChart({ seed = "0", apy = 18, timeframe = "1W" }) {
+  // Distinct, illustrative curve per (vault, timeframe). Re-animates on timeframe change.
+  const points = useMemo(() => sampleSeries(seed, timeframe, apy), [seed, apy, timeframe]);
   const min = Math.min(...points), max = Math.max(...points);
   const w = 600, h = 200, pad = 20;
-  const pts = points.map((p, i) => {
+  const coords = points.map((p, i) => {
     const x = pad + (i / (points.length - 1)) * (w - 2 * pad);
     const y = h - pad - ((p - min) / (max - min || 1)) * (h - 2 * pad);
-    return `${x},${y}`;
-  }).join(" ");
-  const lastY = parseFloat(pts.split(" ").pop().split(",")[1]);
-  const lastX = parseFloat(pts.split(" ").pop().split(",")[0]);
-  const areaPath = `M${pad},${h - pad} L${pts.replace(/,/g, " ").split(" ").reduce((acc, v, i) => {
-    if (i % 2 === 0) return [...acc, v];
-    acc[acc.length - 1] += `,${v}`;
-    return acc;
-  }, []).join(" L")} L${lastX},${h - pad} Z`;
+    return [x, y];
+  });
+  const pts = coords.map(([x, y]) => `${x},${y}`).join(" ");
+  const [lastX, lastY] = coords[coords.length - 1];
+  const areaPath = `M${pad},${h - pad} L${coords.map(([x, y]) => `${x},${y}`).join(" L")} L${lastX},${h - pad} Z`;
+  // unique animation id so each timeframe switch restarts the draw-on
+  const animId = `draw-${String(seed).slice(-6)}-${timeframe}`;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-48">
+    <svg key={timeframe} viewBox={`0 0 ${w} ${h}`} className="w-full h-48">
       <defs>
         <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#00e676" stopOpacity="0.15" />
+          <stop offset="0%" stopColor="#00e676" stopOpacity="0.18" />
           <stop offset="100%" stopColor="#00e676" stopOpacity="0" />
         </linearGradient>
+        <style>{`
+          @keyframes ${animId}-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+          @keyframes ${animId}-fade { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes ${animId}-dot  { 0%,70% { opacity: 0; transform: scale(0); } 100% { opacity: 1; transform: scale(1); } }
+          .${animId}-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: ${animId}-line 1.15s cubic-bezier(.4,0,.2,1) forwards; }
+          .${animId}-area { opacity: 0; animation: ${animId}-fade 1.3s ease forwards .2s; }
+          .${animId}-dot  { transform-box: fill-box; transform-origin: center; animation: ${animId}-dot 1.5s ease forwards; }
+        `}</style>
       </defs>
       {[0, 1, 2, 3, 4].map(i => {
         const y = pad + (i / 4) * (h - 2 * pad);
         const label = (max - (i / 4) * (max - min)).toFixed(1);
-        return (<g key={i}><line x1={pad} y1={y} x2={w - pad} y2={y} stroke="#f0f0f0" strokeWidth="1" /><text x={w - pad + 8} y={y + 4} fontSize="11" fill="#999">{label}%</text></g>);
+        return (<g key={i}><line x1={pad} y1={y} x2={w - pad} y2={y} stroke="#1e293b" strokeWidth="1" /><text x={w - pad + 8} y={y + 4} fontSize="11" fill="#64748b">{label}%</text></g>);
       })}
-      <path d={areaPath} fill="url(#areaGrad)" />
-      <polyline points={pts} fill="none" stroke="#00c853" strokeWidth="2.5" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r="5" fill="#00c853" stroke="white" strokeWidth="2" />
+      <path className={`${animId}-area`} d={areaPath} fill="url(#areaGrad)" />
+      <polyline className={`${animId}-line`} points={pts} pathLength="1" fill="none" stroke="#00c853" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle className={`${animId}-dot`} cx={lastX} cy={lastY} r="5" fill="#00c853" stroke="#0b0f1a" strokeWidth="2" />
     </svg>
   );
 }
@@ -395,8 +382,8 @@ export default function PoolDetail() {
                 ))}
               </div>
             </div>
-            <MiniChart seed={pool.id} apy={apy} />
-          </div>
+            <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
+           </div>
 
           {/* Constituents */}
           <div className="glass p-6">
@@ -538,29 +525,18 @@ export default function PoolDetail() {
             ) : (<>
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400">Estimate your yield <span className="text-slate-500">(optional)</span></span>
+                  <span className="text-slate-400">Deposit {pool.assetSymbol}</span>
                   <span className="text-slate-500">One-time address, valid 60 min</span>
                 </div>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">$</span>
-                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
-                    className="w-full bg-[#0d1324] border border-surface-4/60 rounded-xl py-3.5 pl-9 pr-4 text-lg font-display font-semibold text-slate-100 outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/10" />
-                </div>
-                <div className="text-xs text-slate-500 mt-1.5">No amount needed to deposit — you'll send any amount from your wallet.</div>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Tap below to get your deposit address, then send <span className="text-slate-200 font-semibold">any amount</span> of {pool.assetSymbol} from your wallet. It's captured and credited automatically — no amount to type.
+                </p>
               </div>
 
               <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                <span className="text-xs text-blue-600">Get your deposit address, then send any amount of {pool.assetSymbol} from your wallet</span>
+                <span className="text-xs text-blue-600">Scan the QR or copy the address — send any amount of {pool.assetSymbol}</span>
               </div>
-
-              {amount && parseFloat(amount) > 0 && (
-                <div className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-4 mb-4 space-y-2">
-                  <div className="flex justify-between text-sm"><span className="text-slate-400">Est. Monthly</span><span className="text-emerald-400 font-semibold">+${projectedMonthly}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-400">Est. Yearly</span><span className="font-semibold text-slate-200">+${(projectedMonthly * 12).toFixed(2)}</span></div>
-                  <div className="flex justify-between text-sm"><span className="text-slate-400">APY</span><span className="font-semibold text-slate-200">{apy}%</span></div>
-                </div>
-              )}
 
               <button onClick={handleDeposit} disabled={loading}
                 className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20">

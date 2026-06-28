@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useCountUp } from "../hooks/useCountUp";
 
 export default function PoolCard({ pool, variant = "default" }) {
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
@@ -27,8 +28,12 @@ export default function PoolCard({ pool, variant = "default" }) {
   const footerBorder = isHomeDark ? "border-brand/20" : "border-gray-100";
   const moreDetailsClass = isHomeDark ? "text-brand" : "text-brand-dark";
 
-  const investorLabel = pool.investorsLabel || (pool.totalUsers != null ? Number(pool.totalUsers).toLocaleString() : "0");
+  const investorsNum = pool.totalUsers != null ? Number(pool.totalUsers) : 0;
+  const animInvestors = useCountUp(investorsNum, 1100);
+  const animTvl = useCountUp(tvlNum, 1100);
+  const investorLabel = pool.investorsLabel || Math.round(animInvestors).toLocaleString();
   const popularityLabel = pool.popularityRank || "—";
+  const tvlDisplay = animTvl > 1000 ? `${(animTvl / 1000).toFixed(1)}K` : animTvl.toFixed(0);
 
   return (
     <Link to={`/pool/${pool.id}`} className={cardClass}>
@@ -70,7 +75,7 @@ export default function PoolCard({ pool, variant = "default" }) {
         </div>
         <div className="flex items-center gap-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          <span>TVL: <strong className={statsStrongClass}>${tvlNum > 1000 ? `${(tvlNum / 1000).toFixed(1)}K` : tvlNum.toFixed(0)}</strong> ({capPct}%)</span>
+          <span>TVL: <strong className={statsStrongClass}>${tvlDisplay}</strong> ({capPct}%)</span>
         </div>
         <div className="flex items-center gap-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
