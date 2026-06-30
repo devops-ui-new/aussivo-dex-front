@@ -11,9 +11,13 @@ export default function PoolCard({ pool, variant = "default" }) {
   const lockLabel = pool.lockDays > 0 ? `${pool.lockDays}d Lock` : "Flexible";
   const monthlyApy = pool.apyMonthly ?? pool.displayApyMonthly ?? 0;
   const isPositive = parseFloat(pool.apy || 0) > 0;
-  const tvlNum = Number(pool.total_staked ?? pool.totalStaked ?? 0) / 1e6;
+  const realStaked = Number(pool.total_staked ?? pool.totalStaked ?? 0);
+  const baselineStaked = Number(pool.baseline_staked ?? 0);
+  const tvlNum = (realStaked + baselineStaked) / 1e6;
   const capNum = Number(pool.capacity) / 1e6;
   const capPct = capNum > 0 ? ((tvlNum / capNum) * 100).toFixed(2) : "0";
+  const hasBaseline = baselineStaked > 0 || Number(pool.baseline_users ?? pool.baselineUsers ?? 0) > 0;
+  const baselineNote = hasBaseline ? "Includes a fixed launch baseline; grows with live deposits." : "";
   const isHomeDark = variant === "home-dark";
 
   const cardClass = isHomeDark
@@ -28,7 +32,7 @@ export default function PoolCard({ pool, variant = "default" }) {
   const footerBorder = isHomeDark ? "border-brand/20" : "border-gray-100";
   const moreDetailsClass = isHomeDark ? "text-brand" : "text-brand-dark";
 
-  const investorsNum = pool.totalUsers != null ? Number(pool.totalUsers) : 0;
+  const investorsNum = (pool.totalUsers != null ? Number(pool.totalUsers) : 0) + Number(pool.baseline_users ?? pool.baselineUsers ?? 0);
   const animInvestors = useCountUp(investorsNum, 1100);
   const animTvl = useCountUp(tvlNum, 1100);
   const investorLabel = pool.investorsLabel || Math.round(animInvestors).toLocaleString();
@@ -68,10 +72,10 @@ export default function PoolCard({ pool, variant = "default" }) {
       </div>
 
       {/* Stats Row */}
-      <div className={`flex items-center justify-between text-xs mb-3 ${statsClass}`}>
+      <div className={`flex items-center justify-between text-xs mb-3 ${statsClass}`} title={baselineNote}>
         <div className="flex items-center gap-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Investors: <strong className={statsStrongClass}>{investorLabel}</strong></span>
+          <span>Investors: <strong className={statsStrongClass}>{investorLabel}</strong>{hasBaseline ? <sup className="text-[9px] opacity-60">▵</sup> : null}</span>
         </div>
         <div className="flex items-center gap-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>

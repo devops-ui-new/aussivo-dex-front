@@ -8,6 +8,17 @@ import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInj
 import { sampleSeries } from "../utils/sampleSeries";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
+// Rebalance happens at month-end. Always derive from today so the dates stay in sync:
+// next = last day of the current month, last = last day of the previous month.
+function fmtRebalanceDate(d) {
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+function monthEndRebalanceDates(now = new Date()) {
+  const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  return { last: fmtRebalanceDate(endOfPrevMonth), next: fmtRebalanceDate(endOfThisMonth) };
+}
+
 function formatRemaining(ms) {
   if (ms <= 0) return "0:00";
   const s = Math.floor(ms / 1000);
@@ -283,7 +294,7 @@ export default function PoolDetail() {
   const earlyFeeRaw = pool.early_exit_fee_bps ?? pool.earlyExitFeeBps ?? 0;
   const earlyFee = (earlyFeeRaw / 100).toFixed(0);
   const projectedMonthly = amount ? (parseFloat(amount) * parseFloat(monthlyApy || 0) / 100).toFixed(2) : "0.00";
-  const tvlNum = Number(pool.total_staked ?? pool.totalStaked ?? 0) / 1e6;
+  const tvlNum = (Number(pool.total_staked ?? pool.totalStaked ?? 0) + Number(pool.baseline_staked ?? 0)) / 1e6;
   const capNum = Number(pool.capacity) / 1e6;
   const minDeposit = Number(pool.min_deposit ?? pool.minDeposit ?? 0);
   const maxDeposit = Number(pool.max_deposit ?? pool.maxDeposit ?? 0);
@@ -355,7 +366,7 @@ export default function PoolDetail() {
               ))}
               {strategies.length > 3 && <span className="text-xs text-slate-500 ml-1">+{strategies.length - 3}</span>}
             </div>
-            <span>👥 {pool.investorsLabel || `${Number(pool.totalUsers || 0).toLocaleString()}+`} investors</span>
+            <span>👥 {pool.investorsLabel || `${(Number(pool.totalUsers || 0) + Number(pool.baseline_users ?? 0)).toLocaleString()}+`} investors</span>
             <span>Market Cap: ${capNum > 1000 ? `${(capNum / 1000).toFixed(0)}M` : `${capNum.toFixed(0)}K`} ({((tvlNum / capNum) * 100).toFixed(2)}%)</span>
           </div>
           <div className="mt-2 flex items-center gap-2">
@@ -383,7 +394,8 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-           </div>
+            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
+          </div>
 
           {/* Constituents */}
           <div className="glass p-6">
@@ -447,18 +459,20 @@ export default function PoolDetail() {
                 The strategies in this vault are reviewed and rebalanced at regular intervals to maximize risk-adjusted returns.
               </p>
               <div className="flex gap-6 bg-[#0d1324] border border-surface-4/50 rounded-xl p-4">
+                {(() => { const rb = monthEndRebalanceDates(); return (<>
                 <div className="text-center">
                   <div className="text-xs text-slate-500">Last Rebalance</div>
-                  <div className="text-sm font-bold text-slate-200 mt-1">{pool.lastRebalanceDate || "01 Apr 2026"}</div>
+                  <div className="text-sm font-bold text-slate-200 mt-1">{rb.last}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xs text-slate-500">Next Rebalance</div>
-                  <div className="text-sm font-bold text-slate-200 mt-1">{pool.nextRebalanceDate || "01 May 2026"}</div>
+                  <div className="text-sm font-bold text-slate-200 mt-1">{rb.next}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xs text-slate-500">Frequency</div>
                   <div className="text-sm font-bold text-slate-200 mt-1">{pool.rebalanceFrequency || "Monthly"}</div>
                 </div>
+                </>); })()}
               </div>
             </div>
 

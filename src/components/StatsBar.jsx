@@ -1,9 +1,10 @@
 import { API } from "../config/api";
 import { useEffect, useState } from "react";
+import RollingNumber from "./RollingNumber";
 
 export default function StatsBar() {
   // API imported from config
-  const [stats, setStats] = useState({ tvl: "0", activePools: 0, totalUsers: 0, totalDeposits: 0 });
+  const [stats, setStats] = useState({ tvl: "0", activePools: 0, totalUsers: 0, totalDeposits: 0, tvlReal: "0", tvlBaseline: "0", usersReal: 0, usersBaseline: 0, txReal: 0, txBaseline: 0, hasBaseline: false });
 
   useEffect(() => {
     fetch(`${API}/api/stats`).then(r => r.json()).then(setStats).catch(() => {});
@@ -13,12 +14,17 @@ export default function StatsBar() {
     return () => clearInterval(iv);
   }, [API]);
 
+  // Each stat is an odometer: digits scroll into place on load and animate to new values live.
   const items = [
-    { label: "Total Value Locked", value: `$${Number(stats.tvl).toLocaleString()}` },
-    { label: "Active Vaults", value: stats.activePools },
-    { label: "Active Users", value: stats.totalUsers },
-    { label: "Transactions Executed", value: stats.totalDeposits },
+    { label: "Total Value Locked", node: <RollingNumber value={Number(stats.tvl) || 0} prefix="$" plus /> },
+    { label: "Active Vaults", node: <RollingNumber value={Number(stats.activePools) || 0} /> },
+    { label: "Active Users", node: <RollingNumber value={Number(stats.totalUsers) || 0} plus /> },
+    { label: "Transactions Executed", node: <RollingNumber value={Number(stats.totalDeposits) || 0} plus /> },
   ];
+
+  const liveTvl = `$${Number(stats.tvlReal || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const liveUsers = Number(stats.usersReal || 0).toLocaleString();
+  const liveTx = Number(stats.txReal || 0).toLocaleString();
 
   return (
     <div className="relative w-full bg-black/35">
@@ -37,7 +43,7 @@ export default function StatsBar() {
             <div className="pointer-events-none absolute right-0 top-3 bottom-3 hidden w-px bg-gradient-to-b from-transparent via-[#00e67630] to-transparent md:block" />
           )}
           <div>
-            <div className="text-3xl md:text-5xl font-display font-bold text-slate-50 leading-none">{item.value}</div>
+            <div className="text-3xl md:text-5xl font-display font-bold text-slate-50 leading-none">{item.node}</div>
             <div className="text-xs md:text-base text-slate-300 mt-3">{item.label}</div>
           </div>
         </div>
