@@ -47,11 +47,6 @@ export default function Pools() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
       <h1 className="font-display font-bold text-3xl text-white mb-2">Yield Vaults</h1>
-      {DEMO && (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300 mb-3">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> Sample data — illustrative demo
-        </span>
-      )}
       <p className="text-slate-400 mb-8 max-w-xl">
         Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
       </p>

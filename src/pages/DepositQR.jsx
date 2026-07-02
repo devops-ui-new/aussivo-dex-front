@@ -365,35 +365,6 @@ export default function DepositQR() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3 py-1">
-                  <div className="h-px flex-1 bg-surface-4/50" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">or pay from wallet</span>
-                  <div className="h-px flex-1 bg-surface-4/50" />
-                </div>
-
-                {modalQr.openAmount && (
-                  <input
-                    type="number"
-                    value={payAmount}
-                    onChange={e => setPayAmount(e.target.value)}
-                    placeholder={`Amount of ${modalQr.asset} to send`}
-                    className="input-field w-full text-sm font-semibold"
-                  />
-                )}
-
-                <button
-                  type="button"
-                  onClick={handlePayFromInjectedWallet}
-                  disabled={payingInjected || expiresLeftMs === 0 || !window.ethereum || (modalQr.openAmount && !(parseFloat(payAmount) > 0))}
-                  className="btn-primary w-full rounded-xl py-3.5 text-base font-display font-bold disabled:opacity-50"
-                >
-                  {payingInjected
-                    ? "Waiting for wallet…"
-                    : modalQr.openAmount
-                    ? `Pay ${parseFloat(payAmount) > 0 ? payAmount : ""} ${modalQr.asset}`.trim()
-                    : `Pay ${modalQr.amount} ${modalQr.asset}`}
-                </button>
-
                 <button
                   type="button"
                   onClick={beginCancelDeposit}

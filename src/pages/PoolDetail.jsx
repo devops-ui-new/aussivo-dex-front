@@ -394,7 +394,7 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
+            {/* <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p> */}
           </div>
 
           {/* Constituents */}
@@ -655,39 +655,6 @@ export default function PoolDetail() {
                     Copy address
                   </button>
                 </div>
-
-                <div className="flex items-center gap-3 py-1">
-                  <div className="h-px flex-1 bg-surface-4/50" />
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">or pay from wallet</span>
-                  <div className="h-px flex-1 bg-surface-4/50" />
-                </div>
-
-                {modalQr.openAmount && (
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">$</span>
-                    <input
-                      type="number"
-                      value={payAmount}
-                      onChange={e => setPayAmount(e.target.value)}
-                      placeholder={`Amount of ${modalQr.asset} to send`}
-                      className="w-full bg-[#0d1324] border border-surface-4/60 rounded-xl py-3 pl-9 pr-4 text-sm font-semibold text-slate-100 outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/10"
-                    />
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handlePayFromInjectedWallet}
-                  disabled={payingInjected || expiresLeftMs === 0 || !window.ethereum || (modalQr.openAmount && !(parseFloat(payAmount) > 0))}
-                  title={!window.ethereum ? "Install MetaMask or another EVM wallet extension" : undefined}
-                  className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3.5 font-display text-base font-bold text-white shadow-lg shadow-brand/10 transition-all hover:shadow-brand/25 disabled:opacity-50"
-                >
-                  {payingInjected
-                    ? "Waiting for wallet…"
-                    : modalQr.openAmount
-                    ? `Pay ${parseFloat(payAmount) > 0 ? payAmount : ""} ${modalQr.asset}`.trim()
-                    : `Pay ${modalQr.amount} ${modalQr.asset}`}
-                </button>
 
                 <button
                   type="button"
