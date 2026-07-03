@@ -7,6 +7,7 @@ import brandLogo from "../assets/branding/logo-aussivo.png";
 const NAV = [
   { to: "/", label: "Home" },
   { to: "/pools", label: "Earn" },
+  { to: "/swap", label: "Swap" },
   { to: "/portfolio", label: "Portfolio" },
   { to: "/referral", label: "Referral" },
 ];
@@ -65,7 +66,6 @@ export default function Navbar() {
                       {account && <div className="text-[10px] text-muted font-mono mt-0.5">{short}</div>}
                     </div>
                     <Link to="/portfolio" className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-surface-3 rounded-lg" onClick={() => setMenuOpen(false)}>📊 Portfolio</Link>
-                    <Link to="/swap" className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-surface-3 rounded-lg" onClick={() => setMenuOpen(false)}>🔄 Swap</Link>
                     <Link to="/referral" className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-surface-3 rounded-lg" onClick={() => setMenuOpen(false)}>🤝 Referrals</Link>
                     <button
                       onClick={async () => {
