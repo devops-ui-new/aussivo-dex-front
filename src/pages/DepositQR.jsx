@@ -26,6 +26,7 @@ export default function DepositQR() {
   const [depositCancelConfirm, setDepositCancelConfirm] = useState(false);
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [network, setNetwork] = useState("bep20"); // bep20 (BSC) | trc20 (Tron)
   const [payingInjected, setPayingInjected] = useState(false);
   const [expiresLeftMs, setExpiresLeftMs] = useState(null);
 
@@ -203,7 +204,7 @@ export default function DepositQR() {
       const res = await fetch(`${API}/api/user/deposit/qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ vaultId }),
+        body: JSON.stringify({ vaultId, network }),
       });
       const data = await res.json();
       if (data.status === 200) { setDepositModal({ qr: data.data }); setPayAmount(""); }
@@ -258,6 +259,35 @@ export default function DepositQR() {
               </p>
               <div className="mt-2 text-xs text-muted">One-time address, valid 60 min.</div>
             </div>
+
+            {/* Network selector — the deposit address is generated on the chosen chain */}
+            <div className="mb-4">
+              <div className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">Choose network</div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: "bep20", title: "BEP-20", sub: "USDT on BSC" },
+                  { key: "trc20", title: "TRC-20", sub: "USDT on Tron" },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setNetwork(opt.key)}
+                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                      network === opt.key
+                        ? "border-brand/70 bg-brand/10 ring-2 ring-brand/20"
+                        : "border-surface-4/50 bg-surface-2/40 hover:border-surface-4"
+                    }`}
+                  >
+                    <div className="text-sm font-bold text-slate-100">{opt.title}</div>
+                    <div className="text-xs text-muted mt-0.5">{opt.sub}</div>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-amber-300/90">
+                Send only USDT on the <span className="font-semibold">{network === "trc20" ? "Tron (TRC-20)" : "BSC (BEP-20)"}</span> network to this address. Sending on the wrong network will lose the funds.
+              </p>
+            </div>
+
             <button onClick={generateQR} disabled={loading} className="btn-primary w-full py-4 text-base disabled:opacity-50">
               {loading ? "Generating..." : "Get deposit address →"}
             </button>

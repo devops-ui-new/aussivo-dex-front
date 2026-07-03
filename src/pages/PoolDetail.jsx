@@ -101,6 +101,7 @@ export default function PoolDetail() {
   const [amount, setAmount] = useState("");      // optional — drives the yield estimate only
   const [payAmount, setPayAmount] = useState(""); // optional — amount for in-app "pay from wallet"
   const [loading, setLoading] = useState(false);
+  const [depositNetwork, setDepositNetwork] = useState("bep20"); // bep20 (BSC) | trc20 (Tron)
   const [payingInjected, setPayingInjected] = useState(false);
   const [tab, setTab] = useState("invest");
   const [timeframe, setTimeframe] = useState("1W");
@@ -308,7 +309,7 @@ export default function PoolDetail() {
       const res = await fetch(`${API}/api/user/deposit/qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ vaultId: pool._id || id }),
+        body: JSON.stringify({ vaultId: pool._id || id, network: depositNetwork }),
       });
       const data = await res.json();
       if (data.status === 200) { setDepositModal({ qr: data.data }); setPayAmount(""); }
@@ -394,7 +395,7 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-            {/* <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p> */}
+            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
           </div>
 
           {/* Constituents */}
@@ -550,6 +551,33 @@ export default function PoolDetail() {
               <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
                 <span className="text-xs text-blue-600">Scan the QR or copy the address — send any amount of {pool.assetSymbol}</span>
+              </div>
+
+              <div className="mb-4">
+                <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">Choose network</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: "bep20", title: "BEP-20", sub: "USDT on BSC" },
+                    { key: "trc20", title: "TRC-20", sub: "USDT on Tron" },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setDepositNetwork(opt.key)}
+                      className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                        depositNetwork === opt.key
+                          ? "border-brand/70 bg-brand/10 ring-2 ring-brand/20"
+                          : "border-surface-4/50 bg-[#0d1324] hover:border-surface-4"
+                      }`}
+                    >
+                      <div className="text-sm font-bold text-slate-100">{opt.title}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-amber-300/90">
+                  Send only USDT on the <span className="font-semibold">{depositNetwork === "trc20" ? "Tron (TRC-20)" : "BSC (BEP-20)"}</span> network. Wrong-network transfers are lost.
+                </p>
               </div>
 
               <button onClick={handleDeposit} disabled={loading}
