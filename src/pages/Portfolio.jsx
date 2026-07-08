@@ -106,29 +106,47 @@ function WithdrawProcessingModal({ info, onClose }) {
   const heading =
     info.kind === "exit" ? "Withdrawal & exit submitted" :
     info.kind === "redeem" ? "Redemption submitted" :
-    "Withdrawal submitted";
+    info.kind === "referral" ? "Referral withdrawal submitted" :
+    "Yield withdrawal submitted";
   const amountLine =
-    info.amount != null ? `$${Number(info.amount).toFixed(2)} ${info.asset}` : null;
+    info.amount != null ? `$${Number(info.amount).toFixed(Number(info.amount) < 1 ? 6 : 2)} ${info.asset}` : null;
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4" onClick={onClose}>
-      <div className="glass relative w-full max-w-md rounded-2xl p-7 text-center ring-1 ring-white/[0.06]" onClick={e => e.stopPropagation()}>
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand/10">
-          <svg className="h-8 w-8 animate-spin text-brand" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
-            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4" style={{ animation: "wpmFade .2s ease" }} onClick={onClose}>
+      <style>{`
+        @keyframes wpmFade{from{opacity:0}to{opacity:1}}
+        @keyframes wpmPop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
+        @keyframes wpmDraw{to{stroke-dashoffset:0}}
+        @keyframes wpmBar{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+      `}</style>
+      <div className="glass relative w-full max-w-md rounded-2xl p-7 text-center ring-1 ring-white/[0.06]" style={{ animation: "wpmPop .25s ease" }} onClick={e => e.stopPropagation()}>
+        {/* animated checkmark inside a pulsing ring */}
+        <div className="mx-auto mb-5 relative flex h-16 w-16 items-center justify-center rounded-full bg-brand/10">
+          <span className="absolute inset-0 rounded-full border border-brand/30 animate-ping" />
+          <svg className="h-8 w-8 text-brand" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+            <path d="M7 12.5l3 3 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray="20" strokeDashoffset="20" style={{ animation: "wpmDraw .5s .2s ease forwards" }} />
           </svg>
         </div>
         <h3 className="font-display text-xl font-bold text-white">{heading}</h3>
         {amountLine && <p className="mt-1 font-display text-2xl font-bold text-brand">{amountLine}</p>}
-        <p className="mt-3 text-sm leading-relaxed text-slate-400">
-          {info.note || <>Your request is being processed and settled on-chain. This usually completes shortly —
-          you can track its status anytime under <span className="text-slate-200 font-medium">Withdrawals</span> below,
-          and we'll send the funds to your wallet once it's confirmed.</>}
-        </p>
-        <div className="mt-5 flex items-center justify-center gap-2 text-xs text-slate-500">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-          Processing — no further action needed
+
+        {/* ETA badge */}
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/10 px-4 py-1.5 text-sm font-semibold text-brand">
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" /></svg>
+          Arrives in 4–24 hours
         </div>
+
+        <p className="mt-3 text-sm leading-relaxed text-slate-400">
+          {info.note || <>Your withdrawal is being processed and settled on-chain. Once approved, the funds are sent to your wallet — this usually completes within <span className="text-slate-200 font-medium">4–24 hours</span>. You can track its status anytime under <span className="text-slate-200 font-medium">Withdrawals</span> below.</>}
+        </p>
+
+        {/* indeterminate progress bar */}
+        <div className="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-brand-dark to-brand" style={{ animation: "wpmBar 1.4s ease-in-out infinite" }} />
+        </div>
+        <div className="mt-2 text-xs text-slate-500">Processing — no further action needed</div>
+
         <button onClick={onClose} className="mt-6 w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3 font-display font-bold text-white hover:shadow-lg hover:shadow-brand/20">
           Got it
         </button>
@@ -167,6 +185,133 @@ function LockCountdown({ unlockAt }) {
     </div>
   );
 }
+
+// Compute one deposit's live yield numbers (same math as LiveYield), for summing across a group.
+function computeYield(deposit, pendingYield, now) {
+  const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
+  const amount = Number(deposit.amount || 0);
+  const monthlyYield = (amount * (Number(deposit.apyPercent || 0) / 12)) / 100;
+  const perHour = monthlyYield / (30 * 24);
+  const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
+  const elapsedMs = Math.max(0, now - createdMs);
+  const maxPayments = Number(deposit.maxYieldPayments || 0);
+  const maxTotal = monthlyYield * maxPayments;
+  const accruedRaw = monthlyYield * (elapsedMs / CYCLE_MS);
+  const entitled = maxPayments ? Math.min(accruedRaw, maxTotal) : accruedRaw;
+  const withdrawnY = Number(deposit.yieldWithdrawn || 0);
+  const pending = Number(pendingYield || 0);
+  const withdrawable = Math.max(0, entitled - withdrawnY - pending);
+  const unlockMs = deposit.lockUntil ? new Date(deposit.lockUntil).getTime() : 0;
+  return {
+    earned: entitled, withdrawable, perHour, pending, unlockMs,
+    locked: unlockMs > now,
+    matured: maxPayments > 0 && entitled >= maxTotal - 1e-12,
+  };
+}
+
+/**
+ * One card per vault (display-only grouping). Sums principal + yield across all of the user's
+ * deposits in the same vault. Yield is withdrawn for the whole group from this card; principal
+ * redemption stays per-deposit inside the expandable Details (each has its own 30-day unlock).
+ */
+function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield, openRedeem, loading, bulkLoading }) {
+  const [now, setNow] = useState(Date.now());
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false); // per-card, so one card's action doesn't disable others
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+
+  const first = deposits[0];
+  const asset = first.asset;
+  const vaultId = typeof first.vaultId === "object" ? first.vaultId?._id : first.vaultId;
+  const vaultName = first.vaultId?.name || "Vault";
+  const annualApy = Number(first.poolApy ?? (first.apyPercent || 0)).toFixed(1);
+  const monthlyApy = Number(first.poolApyMonthly ?? ((first.apyPercent || 0) / 12));
+
+  let totalPrincipal = 0, totalEarned = 0, totalWithdrawable = 0, totalPending = 0, perHour = 0;
+  let unlockedNow = 0, lockedAmt = 0, soonestUnlock = Infinity;
+  for (const d of deposits) {
+    const y = computeYield(d, pendingYieldByDeposit[d._id] || 0, now);
+    totalPrincipal += Number(d.amount || 0);
+    totalEarned += y.earned; totalWithdrawable += y.withdrawable; totalPending += y.pending; perHour += y.perHour;
+    if (y.locked) { lockedAmt += Number(d.amount || 0); soonestUnlock = Math.min(soonestUnlock, y.unlockMs); }
+    else unlockedNow += Number(d.amount || 0);
+  }
+  const canWithdrawYield = totalWithdrawable > 1e-9;
+  const soonestDate = soonestUnlock !== Infinity ? new Date(soonestUnlock) : null;
+
+  return (
+    <div className="glass p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold font-display ${asset === "USDC" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}>
+            {asset === "USDC" ? "$" : "₮"}
+          </div>
+          <div>
+            {vaultId ? (
+              <Link to={`/pool/${vaultId}`} className="font-semibold hover:text-brand transition-colors">{vaultName} →</Link>
+            ) : (<div className="font-semibold">{vaultName}</div>)}
+            <div className="text-sm text-muted">${totalPrincipal.toLocaleString()} {asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
+            <div className="text-[11px] text-muted mt-0.5">{deposits.length} deposit{deposits.length > 1 ? "s" : ""} in this vault</div>
+          </div>
+        </div>
+        <div className="text-right">
+          <button
+            onClick={async () => { setSubmitting(true); try { await onWithdrawYield(deposits); } finally { setSubmitting(false); } }}
+            disabled={!canWithdrawYield || submitting}
+            title={canWithdrawYield ? "Withdraw the earned yield across all your deposits in this vault" : "No yield available to withdraw yet"}
+            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
+            {submitting ? "Submitting…" : "Withdraw earned yield →"}
+          </button>
+          <div className="mt-1 space-y-0.5">
+            <div className="text-xs font-mono font-semibold text-yellow-400">+${totalEarned.toFixed(6)} earned</div>
+            <div className="text-[11px] text-muted">
+              Withdrawable: <span className="text-emerald-300 font-mono">+${totalWithdrawable.toFixed(6)}</span>
+              {totalPending > 0 && <span className="text-amber-300/90 font-mono"> · ⟳ ${totalPending.toFixed(6)} processing</span>}
+            </div>
+            <div className="text-[11px] text-muted">≈ ${perHour.toFixed(8)}/hr · Yield withdrawable anytime</div>
+            <div className="text-[11px] text-muted">
+              {lockedAmt <= 0
+                ? <span className="text-slate-300">All principal unlocked (${unlockedNow.toFixed(2)})</span>
+                : <>${unlockedNow.toFixed(2)} unlocked · ${lockedAmt.toFixed(2)} unlocks by {soonestDate?.toLocaleDateString()}</>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button onClick={() => setOpen((o) => !o)} className="mt-3 text-[11px] text-brand hover:underline">
+        {open ? "Hide deposits ▲" : `Details · ${deposits.length} deposit${deposits.length > 1 ? "s" : ""} ▾`}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-2 border-t border-surface-4/40 pt-3">
+          {deposits.map((d, i) => {
+            const y = computeYield(d, pendingYieldByDeposit[d._id] || 0, now);
+            return (
+              <div key={d._id || i} className="flex items-center justify-between gap-3 bg-[#0d1324]/40 rounded-lg px-3 py-2">
+                <div>
+                  <div className="font-mono text-sm text-slate-200">${Number(d.amount || 0).toFixed(2)} {d.asset}</div>
+                  <div className="text-[11px] text-muted">
+                    earned +${y.earned.toFixed(6)} · {y.locked ? `unlocks ${new Date(y.unlockMs).toLocaleDateString()}` : <span className="text-slate-300">principal unlocked</span>}
+                  </div>
+                </div>
+                {d.redemptionPending ? (
+                  <span className="tag tag-yellow text-xs">Redemption Pending</span>
+                ) : (
+                  <button
+                    onClick={() => openRedeem(d)}
+                    disabled={loading === d._id}
+                    className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-3 py-1 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
+                    {loading === d._id ? "..." : "Withdraw →"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /**
  * Live, per-second yield view for one deposit.
@@ -324,6 +469,31 @@ export default function Portfolio() {
     setLoading(null);
   };
 
+  // Withdraw earned yield across ALL of a vault's deposits at once (from the grouped card).
+  // Loading state is managed locally by the calling card (setSubmitting), not globally.
+  const withdrawGroupYield = async (groupDeposits) => {
+    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
+    if (!groupDeposits?.length) return;
+    let ok = 0, skipped = 0, total = 0;
+    for (const d of groupDeposits) {
+      try {
+        const r = await postWithdraw({ source: "yield", depositId: d._id, asset: d.asset, walletAddress: user.walletAddress });
+        if (r.status === 201) { ok++; total += Number(r.data?.amount || 0); } else skipped++;
+      } catch { skipped++; }
+    }
+    load();
+    if (ok) {
+      setProcessingModal({
+        amount: total > 0 ? total : null,
+        asset: groupDeposits[0].asset,
+        kind: "yield",
+        note: `Earned yield from ${ok} deposit${ok > 1 ? "s" : ""} in this vault has been submitted.${skipped ? ` (${skipped} had nothing new to withdraw.)` : ""} Once approved, the funds arrive in your wallet within 4–24 hours. Track it under Withdrawals below.`,
+      });
+    } else {
+      toast(skipped ? "No new yield to withdraw (already processing or $0)" : "Nothing to withdraw", { icon: "ℹ️" });
+    }
+  };
+
   const handleRedeemAll = async (depositIds) => {
     if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
     if (!depositIds?.length) return;
@@ -382,6 +552,16 @@ export default function Portfolio() {
     return !isLocked && !d.redemptionPending;
   });
 
+  // One position per vault+asset (display-only grouping; underlying deposits stay separate).
+  const positionGroups = Object.values(
+    activeDeposits.reduce((acc, d) => {
+      const vId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
+      const key = `${vId}:${d.asset}`;
+      (acc[key] = acc[key] || []).push(d);
+      return acc;
+    }, {})
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
       <h1 className="font-display font-bold text-3xl mb-2">Portfolio</h1>
@@ -413,9 +593,55 @@ export default function Portfolio() {
         </div>
       </div>
 
+      {/* On-chain registration — verify yourself in the public registry contract */}
+      {import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS && (() => {
+        const reg = import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS;
+        const short = (a) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+        return (
+          <div className="relative overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.08] via-surface-1/60 to-surface-1/60 p-5 mb-8">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand/10 blur-3xl" />
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-brand/15 text-brand">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="9" /></svg>
+                </div>
+                <div>
+                  <div className="font-display text-base font-bold text-white">Verify your registration on-chain</div>
+                  <p className="mt-0.5 text-xs text-muted max-w-md">
+                    Your wallet is recorded in Aussivo's public registry contract on BSC. Anyone can verify it — open the contract, go to <span className="text-slate-300">Read → isRegistered</span>, and paste your address.
+                  </p>
+                  <div className="mt-3 space-y-1.5 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500 w-16">Contract</span>
+                      <span className="font-mono text-slate-200">{short(reg)}</span>
+                      <button onClick={() => { navigator.clipboard?.writeText(reg); toast.success("Contract address copied"); }} className="text-brand hover:underline">copy</button>
+                    </div>
+                    {user?.walletAddress && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 w-16">Your wallet</span>
+                        <span className="font-mono text-slate-200">{short(user.walletAddress)}</span>
+                        <button onClick={() => { navigator.clipboard?.writeText(user.walletAddress); toast.success("Your address copied — paste it into isRegistered"); }} className="text-brand hover:underline">copy</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <a
+                href={`https://bscscan.com/address/${reg}#readContract`}
+                target="_blank" rel="noreferrer"
+                className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-dark to-brand px-5 py-3 text-sm font-display font-bold text-white shadow-lg shadow-brand/10 transition-all hover:shadow-brand/25"
+              >
+                Check on BscScan
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M17 7H8M17 7v9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </a>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Active Deposits */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-semibold text-xl">Active Deposits ({activeDeposits.length})</h2>
+        <h2 className="font-display font-semibold text-xl">Active Positions ({positionGroups.length})</h2>
         {redeemableDeposits.length > 0 && (
           <button
             onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
@@ -433,45 +659,17 @@ export default function Portfolio() {
         </div>
       ) : (
         <div className="space-y-3 mb-10">
-          {activeDeposits.map((d, i) => {
-            const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
-            const isLocked = lockDate && lockDate > new Date();
-            const vaultId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
-            const vaultName = d.vaultId?.name || "Vault";
-            const annualApy = Number(d.poolApy ?? (d.apyPercent || 0)).toFixed(1);
-            const monthlyApy = Number(d.poolApyMonthly ?? ((d.apyPercent || 0) / 12));
-            // Live accrual + 30-day payout countdown are handled by <LiveYield/> below.
-            return (
-              <div key={i} className="glass p-5 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold font-display ${d.asset === "USDC" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}>
-                    {d.asset === "USDC" ? "$" : "₮"}
-                  </div>
-                  <div>
-                    {vaultId ? (
-                      <Link to={`/pool/${vaultId}`} className="font-semibold hover:text-brand transition-colors">{vaultName} →</Link>
-                    ) : (
-                      <div className="font-semibold">{vaultName}</div>
-                    )}
-                    <div className="text-sm text-muted">${d.amount?.toLocaleString()} {d.asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  {d.redemptionPending ? (
-                    <span className="tag tag-yellow text-xs">Redemption Pending</span>
-                  ) : (
-                    <button
-                      onClick={() => openRedeem(d)}
-                      disabled={loading === d._id || bulkLoading}
-                      className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
-                      {loading === d._id ? "..." : "Withdraw →"}
-                    </button>
-                  )}
-                  <LiveYield deposit={d} pendingYield={pendingYieldByDeposit[d._id] || 0} />
-                </div>
-              </div>
-            );
-          })}
+          {positionGroups.map((grp, i) => (
+            <GroupedPositionCard
+              key={i}
+              deposits={grp}
+              pendingYieldByDeposit={pendingYieldByDeposit}
+              onWithdrawYield={withdrawGroupYield}
+              openRedeem={openRedeem}
+              loading={loading}
+              bulkLoading={bulkLoading}
+            />
+          ))}
         </div>
       )}
 
@@ -494,7 +692,14 @@ export default function Portfolio() {
                     <tr key={w._id || i} className="border-b border-surface-4/20">
                       <td className="p-3 text-muted">{typeLabel}</td>
                       <td className="p-3"><span className={`tag text-[10px] ${st.cls}`}>{st.label}</span></td>
-                      <td className="p-3 text-right font-semibold text-slate-200">${Number(amt || 0).toFixed(4)} {w.asset}</td>
+                      <td className="p-3 text-right font-semibold text-slate-200">
+                        ${Number(amt || 0).toFixed(4)} {w.asset}
+                        {w.early && Number(w.fee) > 0 && (
+                          <div className="text-[10px] font-normal text-amber-300/90 mt-0.5">
+                            −1% early fee (${Number(w.fee).toFixed(4)}) · you get ${Number(w.netAmount ?? amt).toFixed(4)}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-3 text-right text-xs text-muted">{new Date(w.createdAt).toLocaleDateString()}</td>
                     </tr>
                   );
