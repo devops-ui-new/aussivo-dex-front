@@ -25,6 +25,8 @@ export function Web3Provider({ children }) {
   const linkWalletConflictRef = useRef(new Set());
   const linkWalletPendingRef = useRef(new Set());
   const isSigningOutRef = useRef(false);
+  const connectingRef = useRef(false);            // prevents concurrent eth_requestAccounts (-32002)
+  const autoWalletAuthTriedRef = useRef(new Set()); // wallets we've already auto-signed-in this session
   const [token, setToken] = useState(() => localStorage.getItem("aussivo_token"));
   const [user, setUser] = useState(null);
 
@@ -32,9 +34,14 @@ export function Web3Provider({ children }) {
 
   const connectInjectedWallet = useCallback(async () => {
     if (!window.ethereum) return null;
+    // Don't start a new request while one is already open (MetaMask throws -32002),
+    // and don't fight the brief sign-out window.
+    if (connectingRef.current || isSigningOutRef.current) return null;
+    connectingRef.current = true;
     try {
       const p = new ethers.BrowserProvider(window.ethereum);
       const accounts = await p.send("eth_requestAccounts", []);
+      if (!accounts?.length) return null;
       const s = await p.getSigner();
       const network = await p.getNetwork();
       activeProviderRef.current = window.ethereum;
@@ -44,7 +51,18 @@ export function Web3Provider({ children }) {
       localStorage.setItem("aussivo_wallet", accounts[0]);
       localStorage.setItem("aussivo_wallet_type", "injected");
       return accounts[0];
-    } catch (e) { console.error("Connect failed:", e); return null; }
+    } catch (e) {
+      console.error("Connect failed:", e);
+      // -32002: a request is already pending in the wallet. 4001: user rejected (stay quiet).
+      if (e?.code === -32002) {
+        toast.error("A wallet request is already open — check your wallet extension to continue.");
+      } else if (e?.code !== 4001) {
+        toast.error(e?.shortMessage || e?.message || "Couldn't connect wallet. Please try again.");
+      }
+      return null;
+    } finally {
+      connectingRef.current = false;
+    }
   }, []);
 
   const reconnectInjectedWalletSilent = useCallback(async (savedAddr) => {
@@ -99,6 +117,7 @@ export function Web3Provider({ children }) {
       setWalletType(null);
       activeProviderRef.current = null;
       linkWalletConflictRef.current.clear();
+      autoWalletAuthTriedRef.current.clear();
 
       // Revoke injected-wallet account access for this origin (MetaMask, Rabby, etc.); unsupported wallets no-op.
       if (eth?.request) {
@@ -131,9 +150,11 @@ export function Web3Provider({ children }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("aussivo_wallet");
-    const existingToken = localStorage.getItem("aussivo_token");
     const savedType = localStorage.getItem("aussivo_wallet_type");
-    if (!saved || !existingToken) return;
+    // Reconnect the wallet on load whenever one is saved — even if the JWT expired —
+    // so the auto wallet sign-in below can restore the session without a manual reconnect.
+    // A clean sign-out removes aussivo_wallet, so this won't fire after signing out.
+    if (!saved) return;
     if (savedType === "walletconnect") {
       localStorage.removeItem("aussivo_wallet");
       localStorage.removeItem("aussivo_wallet_type");
@@ -222,6 +243,19 @@ export function Web3Provider({ children }) {
     }
     return { ok: false, needsRegistration: false, error: data.message };
   }, []);
+
+  // Wallet is connected but there's no valid session (e.g. the JWT expired): if that wallet is
+  // registered, sign back in silently — no OTP, no manual reconnect. Tried at most once per
+  // wallet per session, so an unregistered wallet won't loop; it just falls through to the
+  // normal Connect → email/OTP flow. Skipped while signing out.
+  useEffect(() => {
+    if (!account || token || isSigningOutRef.current) return;
+    let key;
+    try { key = ethers.getAddress(account).toLowerCase(); } catch { return; }
+    if (autoWalletAuthTriedRef.current.has(key)) return;
+    autoWalletAuthTriedRef.current.add(key);
+    loginWithWallet(account).catch(() => {});
+  }, [account, token, loginWithWallet]);
 
   const refreshUser = async () => {
     if (!token) return;

@@ -7,6 +7,7 @@ const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token"
 
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
+  const [fin, setFin] = useState(null);
   const [showApyModal, setShowApyModal] = useState(false);
   const [apyConfig, setApyConfig] = useState({ distributeAll: true, vaultId: "", customPercent: "", confirmText: "" });
   const [apyLoading, setApyLoading] = useState(false);
@@ -15,6 +16,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetch(`${API}/api/admin/dashboard`, { headers: hdr() }).then(r => r.json()).then(d => setData(d.data)).catch(() => {});
+    fetch(`${API}/api/admin/financial-overview`, { headers: hdr() }).then(r => r.json()).then(d => setFin(d.data)).catch(() => {});
     fetch(`${API}/api/admin/vaults`, { headers: hdr() }).then(r => r.json()).then(d => setVaults(d.data || [])).catch(() => {});
   }, []);
 
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
         setApyResult(d.data);
         toast.success(`APY distributed successfully!`);
         fetch(`${API}/api/admin/dashboard`, { headers: hdr() }).then(r => r.json()).then(d => setData(d.data));
+        fetch(`${API}/api/admin/financial-overview`, { headers: hdr() }).then(r => r.json()).then(d => setFin(d.data));
       } else toast.error(d.message);
     } catch { toast.error("Distribution failed"); }
     setApyLoading(false);
@@ -61,6 +64,57 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* ═══ YIELD & PRINCIPAL OVERVIEW ═══ */}
+      {(() => {
+        const money = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const y = fin?.yield, r = fin?.referral, p = fin?.principal;
+        const Cell = ({ label, value, sub, color = "text-white" }) => (
+          <div className="rounded-xl border border-surface-4/40 bg-[#0d1324]/50 p-4">
+            <div className="text-[11px] text-muted uppercase tracking-wider">{label}</div>
+            <div className={`text-lg font-display font-bold ${color} mt-1`}>{fin ? value : "—"}</div>
+            {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
+          </div>
+        );
+        return (
+          <div className="glass p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-display font-bold text-base text-white">Yield &amp; Principal Overview</h3>
+                <p className="text-xs text-muted mt-0.5">Full money-flow: yield generated → matured (withdrawable) → withdrawn, plus live accrual and principal movement.</p>
+              </div>
+              {fin?.generatedAt && <span className="text-[11px] text-muted">as of {new Date(fin.generatedAt).toLocaleTimeString()}</span>}
+            </div>
+
+            <div className="text-[11px] uppercase tracking-wider text-brand/80 font-semibold mb-2">Yield</div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+              <Cell label="Generated (all-time)" value={money(y?.generatedAllTime)} sub={`${y?.maturationEvents || 0} maturations`} color="text-emerald-400" />
+              <Cell label="Matured · withdrawable" value={money(y?.maturedOutstanding)} sub="in user balances" color="text-brand" />
+              <Cell label="Accruing (un-matured)" value={money(y?.liveAccruing)} sub="not yet withdrawable" color="text-yellow-400" />
+              <Cell label="Withdrawn (paid out)" value={money(y?.withdrawnNet)} sub={`${y?.withdrawnCount || 0} withdrawals`} />
+              <Cell label="Pending withdrawal" value={money(y?.pendingWithdrawal?.gross)} sub={`${y?.pendingWithdrawal?.count || 0} requests`} color="text-amber-400" />
+            </div>
+
+            <div className="text-[11px] uppercase tracking-wider text-brand/80 font-semibold mb-2">Principal</div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+              <Cell label="Active staked" value={money(p?.activeStaked)} sub={`${p?.activeCount || 0} deposits`} color="text-white" />
+              <Cell label="Deposited (all-time)" value={money(p?.allTimeDeposited)} />
+              <Cell label="Redeemed (paid out)" value={money(p?.redeemedNet)} sub={`${p?.redeemedCount || 0} redemptions`} />
+              <Cell label="Early exits" value={p?.earlyExitCount ?? 0} sub={`fees ${money(p?.earlyExitFees)}`} color="text-amber-400" />
+              <Cell label="Pending redemption" value={money(p?.pendingRedemption?.gross)} sub={`${p?.pendingRedemption?.count || 0} requests`} color="text-amber-400" />
+            </div>
+
+            <div className="text-[11px] uppercase tracking-wider text-brand/80 font-semibold mb-2">Referral &amp; Fees</div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <Cell label="Referral generated" value={money(r?.generatedAllTime)} color="text-blue-400" />
+              <Cell label="Referral outstanding" value={money(r?.outstanding)} sub="not yet withdrawn" />
+              <Cell label="Referral withdrawn" value={money(r?.withdrawnNet)} sub={`${r?.withdrawnCount || 0} withdrawals`} />
+              <Cell label="Early-exit fees" value={money(fin?.feesCollected)} sub="retained by treasury" color="text-emerald-400" />
+              <Cell label="Matured by asset" value={`${money(y?.maturedOutstandingByAsset?.USDT)} · ${money(y?.maturedOutstandingByAsset?.USDC)}`} sub="USDT · USDC" />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* APY Distribution Card */}
       <div className="glass p-6 mb-8 border-brand/10">
         <div className="flex items-center justify-between">
@@ -69,8 +123,8 @@ export default function AdminDashboard() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00e676" strokeWidth="1.8"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
             </div>
             <div>
-              <h3 className="font-display font-bold text-base text-white">APY Distribution (continuous accrual)</h3>
-              <p className="text-xs text-muted mt-0.5">Settles accrued yield for every active deposit + referral commissions (L1: 0.35%, L2: 0.15%). Yield accrues continuously and is withdrawable anytime; this just keeps balances fresh. Runs daily.</p>
+              <h3 className="font-display font-bold text-base text-white">APY Maturation (30-day cycles)</h3>
+              <p className="text-xs text-muted mt-0.5">Matures each active deposit's completed 30-day cycles into the user's withdrawable balance + pays referral commissions (L1: 0.35%, L2: 0.15%). Un-matured yield in the current cycle isn't withdrawable. Runs daily and on portfolio load.</p>
             </div>
           </div>
           <button onClick={() => { setShowApyModal(true); setApyResult(null); setApyConfig({ distributeAll: true, vaultId: "", customPercent: "", confirmText: "" }); }}

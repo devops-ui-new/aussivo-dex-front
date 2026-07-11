@@ -14,82 +14,63 @@ const STATUS_META = {
 };
 
 /**
- * Withdraw choices for a deposit:
- *   1) Withdraw the yield earned so far — available ANYTIME, principal keeps earning.
- *   2) Withdraw yield + principal and exit — only once the 30-day principal lock is over.
- *   3) Keep accumulating — do nothing.
+ * Principal redemption. Principal is withdrawable ANYTIME. Within 30 days of the deposit a 1%
+ * early-exit fee applies AND the current (un-matured) cycle's yield is forfeited. Yield that has
+ * already matured is kept — it lives in the separate "Matured Yield" balance and is withdrawn there.
  */
-function RedeemChoiceModal({ deposit, busy, pendingYield = 0, onWithdrawYield, onWithdrawAll, onClose }) {
-  const [, force] = useState(0);
-  useEffect(() => { const t = setInterval(() => force(n => n + 1), 1000); return () => clearInterval(t); }, []);
+function RedeemChoiceModal({ deposit, busy, onRedeem, onClose }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const asset = deposit?.asset || "";
   const principal = Number(deposit?.amount || 0);
   const vaultName = deposit?.vaultId?.name || "this vault";
 
-  // lifetime earned (never drops) and what's actually free to withdraw right now
-  const monthly = (principal * (Number(deposit?.apyPercent || 0) / 12)) / 100;
-  const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
-  const createdMs = deposit?.createdAt ? new Date(deposit.createdAt).getTime() : Date.now();
-  const maxTotal = monthly * Number(deposit?.maxYieldPayments || 0);
-  const entitled = Math.min(monthly * ((Date.now() - createdMs) / CYCLE_MS), maxTotal || Infinity);
-  const pending = Number(pendingYield || 0);
-  const earned = entitled; // lifetime
-  const withdrawable = Math.max(0, entitled - Number(deposit?.yieldWithdrawn || 0) - pending);
-  const yieldDisabled = busy || pending > 0 || withdrawable < 1e-6;
+  const y = computeYield(deposit || {}, now);
+  const fee = y.early ? principal * 0.01 : 0;
+  const net = principal - fee;
+  const forfeited = y.liveThisCycle;
 
-  // principal lock
-  const unlockMs = deposit?.lockUntil ? new Date(deposit.lockUntil).getTime() : 0;
-  const locked = unlockMs > Date.now();
-  const ms = Math.max(0, unlockMs - Date.now());
+  // Countdown to the end of the 1% fee window (30 days from deposit).
+  const ms = Math.max(0, y.feeWindowEndsMs - now);
   const dd = Math.floor(ms / 86400000), hh = Math.floor((ms % 86400000) / 3600000), mm = Math.floor((ms % 3600000) / 60000);
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4" onClick={onClose}>
       <div className="glass relative w-full max-w-md rounded-2xl p-7 ring-1 ring-white/[0.06]" onClick={e => e.stopPropagation()}>
-        <h3 className="font-display text-xl font-bold text-white text-center">Manage your deposit</h3>
+        <h3 className="font-display text-xl font-bold text-white text-center">Redeem principal</h3>
+
         <div className="mt-4 rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-slate-400">Principal in {vaultName}</span><span className="font-semibold text-slate-100">${principal.toLocaleString()} {asset}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">Yield earned so far</span><span className="font-mono font-semibold text-emerald-400">+${earned.toFixed(6)} {asset}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">Withdrawable now</span><span className="font-mono font-semibold text-slate-100">+${withdrawable.toFixed(6)} {asset}</span></div>
-          {pending > 0 && (
-            <div className="flex justify-between"><span className="text-slate-400">Processing</span><span className="font-mono font-semibold text-amber-300">⟳ +${pending.toFixed(6)} {asset}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Matured yield (kept)</span><span className="font-mono font-semibold text-emerald-400">${y.maturedSoFar.toFixed(6)} {asset}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">This cycle's yield (forfeited)</span><span className="font-mono font-semibold text-slate-400">−${forfeited.toFixed(6)} {asset}</span></div>
+          {y.early && (
+            <div className="flex justify-between"><span className="text-amber-300/90">Early-exit fee (1%)</span><span className="font-mono font-semibold text-amber-300">−${fee.toFixed(6)} {asset}</span></div>
           )}
+          <div className="flex justify-between border-t border-surface-4/40 pt-2"><span className="text-slate-300">You receive</span><span className="font-mono font-bold text-white">${net.toFixed(6)} {asset}</span></div>
         </div>
 
+        {y.early ? (
+          <div className="mt-3 rounded-lg bg-amber-500/[0.07] border border-amber-500/20 px-3 py-2 text-[11px] text-amber-200/90">
+            You're within the first 30 days ({dd}d {String(hh).padStart(2,"0")}h {String(mm).padStart(2,"0")}m left). Redeeming now costs a 1% fee and forfeits this cycle's un-matured yield. Wait until the cycle completes to redeem fee-free and let this cycle's yield mature.
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2 text-[11px] text-emerald-200/80">
+            No early-exit fee. Your matured yield stays in your Matured Yield balance — withdraw it there anytime. Only this cycle's un-matured portion is forfeited on exit.
+          </div>
+        )}
+
         <div className="mt-6 space-y-2.5">
-          {/* 1) Yield only — anytime */}
           <button
-            onClick={onWithdrawYield}
-            disabled={yieldDisabled}
+            onClick={onRedeem}
+            disabled={busy}
             className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3.5 font-display font-bold text-white hover:shadow-lg hover:shadow-brand/20 disabled:opacity-50"
           >
-            {busy ? "Submitting…" : pending > 0 ? "Yield withdrawal processing…" : "Withdraw earned yield"}
-            <span className="block text-[11px] font-normal text-white/80">
-              {pending > 0 ? "Awaiting approval · nothing deducted yet" : "Principal keeps earning · available anytime"}
-            </span>
+            {busy ? "Submitting…" : y.early ? `Redeem now — 1% fee (get $${net.toFixed(2)})` : "Redeem principal & exit"}
+            <span className="block text-[11px] font-normal text-white/80">Returns your principal and closes this deposit</span>
           </button>
-
-          {/* 2) Yield + principal + exit — needs unlocked principal */}
-          <button
-            onClick={onWithdrawAll}
-            disabled={busy || locked}
-            title={locked ? "Principal is still locked" : undefined}
-            className="w-full rounded-xl border border-surface-4/60 py-3 font-display font-semibold text-slate-200 hover:border-brand/40 hover:bg-brand/[0.06] disabled:opacity-50 disabled:hover:border-surface-4/60 disabled:hover:bg-transparent"
-          >
-            Withdraw yield + principal & exit
-            <span className="block text-[11px] font-normal text-slate-400">
-              {locked ? `Principal unlocks in ${dd}d ${String(hh).padStart(2,"0")}h ${String(mm).padStart(2,"0")}m` : "Returns your principal and closes this deposit"}
-            </span>
-          </button>
-
-          {/* 3) Keep accumulating */}
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="w-full rounded-xl py-2.5 text-sm font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50"
-          >
-            Keep accumulating yield
+          <button onClick={onClose} disabled={busy} className="w-full rounded-xl py-2.5 text-sm font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50">
+            Keep earning
           </button>
         </div>
       </div>
@@ -186,38 +167,48 @@ function LockCountdown({ unlockAt }) {
   );
 }
 
-// Compute one deposit's live yield numbers (same math as LiveYield), for summing across a group.
-function computeYield(deposit, pendingYield, now) {
+// Compute one deposit's yield numbers under the 30-day maturation model.
+//  • liveThisCycle: yield accruing in the CURRENT (incomplete) 30-day cycle. Climbs from 0 to
+//    one monthly-yield, then resets to 0 when the cycle matures. NOT withdrawable.
+//  • maturedSoFar: cumulative yield that has already matured into the withdrawable balance.
+//  • nextMaturationMs: timestamp when the current cycle completes and matures.
+function computeYield(deposit, now) {
   const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
   const amount = Number(deposit.amount || 0);
   const monthlyYield = (amount * (Number(deposit.apyPercent || 0) / 12)) / 100;
   const perHour = monthlyYield / (30 * 24);
+  const perDay = monthlyYield / 30;
   const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
   const elapsedMs = Math.max(0, now - createdMs);
   const maxPayments = Number(deposit.maxYieldPayments || 0);
-  const maxTotal = monthlyYield * maxPayments;
-  const accruedRaw = monthlyYield * (elapsedMs / CYCLE_MS);
-  const entitled = maxPayments ? Math.min(accruedRaw, maxTotal) : accruedRaw;
-  const withdrawnY = Number(deposit.yieldWithdrawn || 0);
-  const pending = Number(pendingYield || 0);
-  const withdrawable = Math.max(0, entitled - withdrawnY - pending);
+  const completedCycles = maxPayments
+    ? Math.min(Math.floor(elapsedMs / CYCLE_MS), maxPayments)
+    : Math.floor(elapsedMs / CYCLE_MS);
+  const termDone = maxPayments > 0 && completedCycles >= maxPayments;
+  const fracMs = elapsedMs - completedCycles * CYCLE_MS;
+  const liveThisCycle = termDone ? 0 : monthlyYield * (fracMs / CYCLE_MS);
+  const nextMaturationMs = termDone ? 0 : createdMs + (completedCycles + 1) * CYCLE_MS;
+  const maturedSoFar = Math.max(Number(deposit.maturedYield || 0), Number(deposit.totalYieldPaid || 0));
   const unlockMs = deposit.lockUntil ? new Date(deposit.lockUntil).getTime() : 0;
+  // Early-exit fee window: within 30 days of the deposit, principal redemption costs 1%.
+  const feeWindowEndsMs = createdMs + CYCLE_MS;
   return {
-    earned: entitled, withdrawable, perHour, pending, unlockMs,
-    locked: unlockMs > now,
-    matured: maxPayments > 0 && entitled >= maxTotal - 1e-12,
+    amount, monthlyYield, perHour, perDay, completedCycles, maxPayments, termDone,
+    liveThisCycle, nextMaturationMs, maturedSoFar,
+    unlockMs, locked: unlockMs > now,
+    early: now < feeWindowEndsMs, feeWindowEndsMs,
   };
 }
 
 /**
- * One card per vault (display-only grouping). Sums principal + yield across all of the user's
- * deposits in the same vault. Yield is withdrawn for the whole group from this card; principal
- * redemption stays per-deposit inside the expandable Details (each has its own 30-day unlock).
+ * One card per vault (display-only grouping). Sums principal across the user's deposits in the
+ * same vault, and shows this-cycle accruing + matured-so-far + next maturation. Yield is NO
+ * longer withdrawn here — matured yield is withdrawn from the "Matured Yield" balance at the
+ * top. Principal redemption stays per-deposit inside Details (redeemable anytime; 1% if < 30d).
  */
-function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield, openRedeem, loading, bulkLoading }) {
+function GroupedPositionCard({ deposits, openRedeem, loading }) {
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false); // per-card, so one card's action doesn't disable others
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const first = deposits[0];
@@ -227,17 +218,14 @@ function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield,
   const annualApy = Number(first.poolApy ?? (first.apyPercent || 0)).toFixed(1);
   const monthlyApy = Number(first.poolApyMonthly ?? ((first.apyPercent || 0) / 12));
 
-  let totalPrincipal = 0, totalEarned = 0, totalWithdrawable = 0, totalPending = 0, perHour = 0;
-  let unlockedNow = 0, lockedAmt = 0, soonestUnlock = Infinity;
+  let totalPrincipal = 0, totalLive = 0, totalMatured = 0, perDay = 0, soonestMaturation = Infinity;
   for (const d of deposits) {
-    const y = computeYield(d, pendingYieldByDeposit[d._id] || 0, now);
-    totalPrincipal += Number(d.amount || 0);
-    totalEarned += y.earned; totalWithdrawable += y.withdrawable; totalPending += y.pending; perHour += y.perHour;
-    if (y.locked) { lockedAmt += Number(d.amount || 0); soonestUnlock = Math.min(soonestUnlock, y.unlockMs); }
-    else unlockedNow += Number(d.amount || 0);
+    const y = computeYield(d, now);
+    totalPrincipal += y.amount;
+    totalLive += y.liveThisCycle; totalMatured += y.maturedSoFar; perDay += y.perDay;
+    if (!y.termDone && y.nextMaturationMs) soonestMaturation = Math.min(soonestMaturation, y.nextMaturationMs);
   }
-  const canWithdrawYield = totalWithdrawable > 1e-9;
-  const soonestDate = soonestUnlock !== Infinity ? new Date(soonestUnlock) : null;
+  const maturationDate = soonestMaturation !== Infinity ? new Date(soonestMaturation) : null;
 
   return (
     <div className="glass p-5">
@@ -255,24 +243,12 @@ function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield,
           </div>
         </div>
         <div className="text-right">
-          <button
-            onClick={async () => { setSubmitting(true); try { await onWithdrawYield(deposits); } finally { setSubmitting(false); } }}
-            disabled={!canWithdrawYield || submitting}
-            title={canWithdrawYield ? "Withdraw the earned yield across all your deposits in this vault" : "No yield available to withdraw yet"}
-            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
-            {submitting ? "Submitting…" : "Withdraw earned yield →"}
-          </button>
-          <div className="mt-1 space-y-0.5">
-            <div className="text-xs font-mono font-semibold text-yellow-400">+${totalEarned.toFixed(6)} earned</div>
-            <div className="text-[11px] text-muted">
-              Withdrawable: <span className="text-emerald-300 font-mono">+${totalWithdrawable.toFixed(6)}</span>
-              {totalPending > 0 && <span className="text-amber-300/90 font-mono"> · ⟳ ${totalPending.toFixed(6)} processing</span>}
-            </div>
-            <div className="text-[11px] text-muted">≈ ${perHour.toFixed(8)}/hr · Yield withdrawable anytime</div>
-            <div className="text-[11px] text-muted">
-              {lockedAmt <= 0
-                ? <span className="text-slate-300">All principal unlocked (${unlockedNow.toFixed(2)})</span>
-                : <>${unlockedNow.toFixed(2)} unlocked · ${lockedAmt.toFixed(2)} unlocks by {soonestDate?.toLocaleDateString()}</>}
+          <div className="space-y-0.5">
+            <div className="text-xs font-mono font-semibold text-yellow-400">+${totalLive.toFixed(6)} <span className="font-sans font-normal text-muted">this cycle</span></div>
+            <div className="text-[11px] text-muted">Matured: <span className="text-emerald-300 font-mono">+${totalMatured.toFixed(6)}</span></div>
+            <div className="text-[11px] text-muted">≈ ${perDay.toFixed(6)}/day</div>
+            <div className="text-[11px] text-emerald-400/80">
+              {maturationDate ? <>Next maturation {maturationDate.toLocaleDateString()}</> : "Term complete"}
             </div>
           </div>
         </div>
@@ -284,13 +260,14 @@ function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield,
       {open && (
         <div className="mt-3 space-y-2 border-t border-surface-4/40 pt-3">
           {deposits.map((d, i) => {
-            const y = computeYield(d, pendingYieldByDeposit[d._id] || 0, now);
+            const y = computeYield(d, now);
             return (
               <div key={d._id || i} className="flex items-center justify-between gap-3 bg-[#0d1324]/40 rounded-lg px-3 py-2">
                 <div>
                   <div className="font-mono text-sm text-slate-200">${Number(d.amount || 0).toFixed(2)} {d.asset}</div>
                   <div className="text-[11px] text-muted">
-                    earned +${y.earned.toFixed(6)} · {y.locked ? `unlocks ${new Date(y.unlockMs).toLocaleDateString()}` : <span className="text-slate-300">principal unlocked</span>}
+                    +${y.liveThisCycle.toFixed(6)} this cycle · matured +${y.maturedSoFar.toFixed(6)}
+                    {y.early && <span className="text-amber-300/90"> · 1% fee if redeemed now</span>}
                   </div>
                 </div>
                 {d.redemptionPending ? (
@@ -300,7 +277,7 @@ function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield,
                     onClick={() => openRedeem(d)}
                     disabled={loading === d._id}
                     className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-3 py-1 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
-                    {loading === d._id ? "..." : "Withdraw →"}
+                    {loading === d._id ? "..." : "Redeem →"}
                   </button>
                 )}
               </div>
@@ -314,67 +291,189 @@ function GroupedPositionCard({ deposits, pendingYieldByDeposit, onWithdrawYield,
 
 
 /**
- * Live, per-second yield view for one deposit.
- *  • "earning" = continuous real-time earned-so-far (accrues every second), capped at term.
- *  • Yield is withdrawable ANYTIME — there is no 30-day payout gate on yield.
- *  • Only the PRINCIPAL is time-locked (30 days); we show its unlock countdown here.
+ * Live, per-second view for one deposit under the 30-day maturation model.
+ *  • "accruing this cycle" ticks up every second, then RESETS to 0 when the 30-day cycle matures.
+ *  • matured yield moves to the withdrawable "Matured Yield" balance (shown at the top).
  * apyPercent is the ANNUAL APY %; monthly = annual / 12; hourly = monthly / (30·24).
  */
-function LiveYield({ deposit, pendingYield = 0 }) {
+function LiveYield({ deposit }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
-  const amount = Number(deposit.amount || 0);
-  const monthlyYield = (amount * (Number(deposit.apyPercent || 0) / 12)) / 100;
-  const perHour = monthlyYield / (30 * 24);
+  const y = computeYield(deposit, now);
+  const live = y.amount > 0 && y.monthlyYield > 0;
 
-  const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
-  const elapsedMs = Math.max(0, now - createdMs);
-  const maxPayments = Number(deposit.maxYieldPayments || 0);
-
-  const maxTotal = monthlyYield * maxPayments;
-  const accruedRaw = monthlyYield * (elapsedMs / CYCLE_MS);
-  const entitled = maxPayments ? Math.min(accruedRaw, maxTotal) : accruedRaw;
-  const withdrawnY = Number(deposit.yieldWithdrawn || 0);
-  const grossEarned = entitled;                          // lifetime earned — NEVER resets
-  const pending = Number(pendingYield || 0);             // amount in a pending (processing) request
-  const withdrawable = Math.max(0, entitled - withdrawnY - pending); // free to withdraw right now
-  const matured = maxPayments > 0 && entitled >= maxTotal - 1e-12;
-
-  // principal lock countdown (the ONLY 30-day timer that remains)
-  const unlockMs = deposit.lockUntil ? new Date(deposit.lockUntil).getTime() : 0;
-  const locked = unlockMs > now;
-  const lms = Math.max(0, unlockMs - now);
-  const ld = Math.floor(lms / 86400000), lh = Math.floor((lms % 86400000) / 3600000), lm = Math.floor((lms % 3600000) / 60000);
-
-  const live = amount > 0 && monthlyYield > 0;
+  // Countdown to the next maturation (when this cycle's yield becomes withdrawable).
+  const nms = Math.max(0, y.nextMaturationMs - now);
+  const nd = Math.floor(nms / 86400000), nh = Math.floor((nms % 86400000) / 3600000), nm = Math.floor((nms % 3600000) / 60000);
 
   return (
     <div className="mt-1 space-y-0.5">
-      {/* Lifetime earned — keeps growing, never drops, even after you withdraw */}
+      {/* Accruing this cycle — resets to 0 each time a 30-day cycle matures */}
       <div className="text-xs font-mono font-semibold text-yellow-400">
-        +${grossEarned.toFixed(6)} earned
+        +${y.liveThisCycle.toFixed(6)} <span className="font-sans font-normal text-muted">accruing this cycle</span>
       </div>
-      {/* What's actually available to withdraw right now (drops after a withdrawal, then climbs again) */}
+      {/* Matured (already moved to your withdrawable Matured Yield balance) */}
       <div className="text-[11px] text-muted">
-        Withdrawable: <span className="text-emerald-300 font-mono">+${withdrawable.toFixed(6)}</span>
-        {pending > 0 && <span className="text-amber-300/90 font-mono"> · ⟳ ${pending.toFixed(6)} processing</span>}
+        Matured: <span className="text-emerald-300 font-mono">+${y.maturedSoFar.toFixed(6)}</span>
+        <span className="text-slate-500"> · in Matured Yield balance</span>
       </div>
       <div className="text-[11px] text-muted">
-        {live ? <>≈ ${perHour.toFixed(8)}/hr</> : <>≈ —</>}
+        {live ? <>≈ ${y.perDay.toFixed(6)}/day</> : <>≈ —</>}
       </div>
       <div className="text-[11px] text-emerald-400/80">
-        {matured ? "Term complete" : "Yield withdrawable anytime"}
+        {y.termDone
+          ? "Term complete"
+          : <>Matures in {nd}d {String(nh).padStart(2, "0")}h {String(nm).padStart(2, "0")}m</>}
       </div>
-      <div className="text-[11px] text-muted">
-        {locked
-          ? <>Principal unlocks in {ld}d {String(lh).padStart(2, "0")}h {String(lm).padStart(2, "0")}m</>
-          : <span className="text-slate-300">Principal unlocked</span>}
+    </div>
+  );
+}
+
+/**
+ * Read-only card summing the live (un-matured) yield accruing across all active deposits in the
+ * current 30-day cycle. Ticks every second and resets whenever a deposit's cycle matures — this
+ * is the "main portfolio yield that restarts from 0" each cycle. Not withdrawable.
+ */
+function AccruingThisCycleCard({ deposits }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  let live = 0, perDay = 0;
+  for (const d of deposits) { const y = computeYield(d, now); live += y.liveThisCycle; perDay += y.perDay; }
+  return (
+    <div className="glass p-5">
+      <div className="text-xs text-muted mb-1 uppercase tracking-wider">Accruing This Cycle</div>
+      <div className="text-2xl font-display font-bold text-yellow-400 font-mono">${live.toFixed(6)}</div>
+      <div className="text-[11px] text-muted mt-1">≈ ${perDay.toFixed(6)}/day · matures every 30 days</div>
+    </div>
+  );
+}
+
+// Cosmetic, stable "vault" address derived from a seed — NOT the user's real wallet and NOT a
+// real payout address. It's a decorative identifier for the matured-yield storage vault shown
+// in the UI. Payouts are always sent to the user's actual connected wallet on the backend.
+function vaultAddressFromSeed(seed) {
+  const s = String(seed || "aussivo-matured-yield-vault");
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  let x = h >>> 0, hex = "";
+  while (hex.length < 40) {
+    x = Math.imul(x ^ (x >>> 15), 2246822519) >>> 0;
+    x = (x + 0x9e3779b9) >>> 0;
+    hex += x.toString(16).padStart(8, "0");
+  }
+  return "0x" + hex.slice(0, 40);
+}
+
+/**
+ * Matured Yield "vault" tab — a wallet-style panel that holds the user's matured (withdrawable)
+ * yield. This is the ONLY place a yield withdrawal request can be started. The address shown is a
+ * cosmetic vault identifier; actual payouts go to the user's connected wallet after admin review.
+ */
+function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
+  const usdt = Number(user?.yieldWalletUSDT || 0);
+  const usdc = Number(user?.yieldWalletUSDC || 0);
+  const total = usdt + usdc;
+  const vaultAddr = vaultAddressFromSeed(seed);
+  const shortAddr = `${vaultAddr.slice(0, 12)}…${vaultAddr.slice(-8)}`;
+
+  const pendingByAsset = {};
+  (withdrawals || []).forEach((w) => {
+    if (w.source === "yield" && (w.status === "pending" || w.status === "approved")) {
+      pendingByAsset[w.asset] = (pendingByAsset[w.asset] || 0) + Number(w.amount || 0);
+    }
+  });
+  const yieldReqs = (withdrawals || []).filter((w) => w.source === "yield" && w.status !== "rejected");
+
+  const AssetRow = ({ asset, bal }) => {
+    const pending = pendingByAsset[asset] || 0;
+    const disabled = loading || bal < 1e-6 || pending > 0;
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-surface-4/40 bg-[#0d1324]/60 px-4 py-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-100">{asset}</div>
+          <div className="font-mono text-lg font-bold text-brand">${formatYieldBalanceUsd(bal)}</div>
+          {pending > 0 && <div className="text-[11px] text-amber-300/90">⟳ ${formatYieldBalanceUsd(pending)} processing</div>}
+        </div>
+        <button
+          onClick={() => onWithdraw(bal, asset, "yield")}
+          disabled={disabled}
+          title={pending > 0 ? "A withdrawal for this asset is already processing" : bal < 1e-6 ? "No matured yield yet" : "Request a withdrawal"}
+          className="rounded-xl bg-gradient-to-r from-brand-dark to-brand px-4 py-2.5 text-sm font-display font-bold text-white hover:shadow-lg hover:shadow-brand/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? "…" : "Request Withdrawal"}
+        </button>
       </div>
+    );
+  };
+
+  return (
+    <div className="mb-10">
+      {/* Wallet-style vault card */}
+      <div className="relative overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.10] via-surface-1/70 to-surface-1/70 p-6">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-brand/10 blur-3xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18v12H3z" strokeLinejoin="round"/><path d="M16 12h3M3 7l3-3h12l3 3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div>
+              <div className="font-display text-base font-bold text-white">Matured Yield Vault</div>
+              <div className="text-[11px] text-muted">Holds your withdrawable, matured yield</div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-surface-4/40 bg-[#0d1324]/60 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Vault</span>
+            <span className="font-mono text-sm text-slate-200">{shortAddr}</span>
+          </div>
+
+          <div className="mt-5">
+            <div className="text-xs text-muted uppercase tracking-wider">Total matured · withdrawable</div>
+            <div className="font-display text-3xl font-bold text-white">${formatYieldBalanceUsd(total)}</div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <AssetRow asset="USDT" bal={usdt} />
+            {(usdc > 0 || pendingByAsset.USDC) && <AssetRow asset="USDC" bal={usdc} />}
+          </div>
+
+          <div className="mt-4 rounded-lg bg-brand/[0.06] border border-brand/15 px-3 py-2 text-[11px] text-slate-300">
+            Withdrawal requests are reviewed and disbursed Automatically. As funds are accumulated and batched from different protocls, payouts <span className="text-slate-100 font-medium">typically take 4–24 hours</span> to arrive in your connected wallet. You can track status under History.
+          </div>
+        </div>
+      </div>
+
+      {/* Matured-yield request history */}
+      {yieldReqs.length > 0 && (
+        <div className="glass overflow-hidden mt-6">
+          <div className="px-4 pt-4 pb-2 text-sm font-display font-semibold text-white">Matured yield requests</div>
+          <table className="w-full text-sm">
+            <thead><tr className="text-xs text-muted border-b border-surface-4">
+              <th className="text-left p-3">Status</th><th className="text-right p-3">Amount</th><th className="text-right p-3">Requested</th>
+            </tr></thead>
+            <tbody>
+              {yieldReqs.map((w, i) => {
+                const st = STATUS_META[w.status] || STATUS_META.pending;
+                const processing = w.status === "pending" || w.status === "approved";
+                return (
+                  <tr key={w._id || i} className="border-b border-surface-4/20">
+                    <td className="p-3">
+                      <span className={`tag text-[10px] ${st.cls}`}>{st.label}</span>
+                      {processing && <div className="text-[10px] text-muted mt-0.5">typically 4–24 hours</div>}
+                    </td>
+                    <td className="p-3 text-right font-semibold text-slate-200">${Number(w.amount || 0).toFixed(4)} {w.asset}</td>
+                    <td className="p-3 text-right text-xs text-muted">{new Date(w.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -388,6 +487,7 @@ export default function Portfolio() {
   const [redeemModal, setRedeemModal] = useState(null); // the deposit the user is choosing to redeem
   const [loading, setLoading] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [tab, setTab] = useState("overview"); // overview | yield | history
 
   const hdr = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
 
@@ -433,65 +533,26 @@ export default function Portfolio() {
   const postWithdraw = (body) =>
     fetch(`${API}/api/user/withdraw`, { method: "POST", headers: hdr(), body: JSON.stringify(body) }).then(r => r.json());
 
-  // 1) Withdraw only the yield earned so far for THIS deposit (principal stays, keeps earning). Anytime.
-  const withdrawYieldOnly = async (deposit) => {
+  // Redeem THIS deposit's principal and exit. Allowed anytime; the backend applies the 1%
+  // early-exit fee + forfeits the current cycle's un-matured yield if it's within 30 days.
+  // Matured yield is untouched — it stays in the Matured Yield balance and is withdrawn there.
+  const redeemPrincipal = async (deposit) => {
     if (!deposit) return;
     setLoading(deposit._id);
     try {
-      const d = await postWithdraw({ source: "yield", depositId: deposit._id, asset: deposit.asset, walletAddress: user.walletAddress });
-      if (d.status === 201) { setRedeemModal(null); setProcessingModal({ amount: d.data?.amount ?? null, asset: deposit.asset, kind: "yield" }); load(); }
-      else toast.error(d.message || "Failed");
-    } catch { toast.error("Failed"); }
-    setLoading(null);
-  };
-
-  // 2) Withdraw THIS deposit's earned yield AND its principal, then exit (principal must be unlocked).
-  const withdrawYieldAndExit = async (deposit) => {
-    if (!deposit) return;
-    setLoading(deposit._id);
-    try {
-      // Try the yield first. It's fine if there's nothing new (already processing / $0) —
-      // we still submit the principal, and we tell the user exactly what happened.
-      const y = await postWithdraw({ source: "yield", depositId: deposit._id, asset: deposit.asset, walletAddress: user.walletAddress });
-      const yieldSubmitted = y.status === 201;
       const d = await postWithdraw({ source: "deposit", depositId: deposit._id, walletAddress: user.walletAddress });
       if (d.status === 201) {
         setRedeemModal(null);
         setProcessingModal({
-          amount: null, asset: deposit.asset, kind: "exit",
-          note: yieldSubmitted
-            ? "Both your earned yield and your principal have been submitted."
-            : "Your principal has been submitted. (Your earned yield was already being processed in a separate request — check Withdrawals below.)",
+          amount: d.data?.netAmount ?? deposit.amount, asset: deposit.asset, kind: "exit",
+          note: d.data?.early
+            ? "Your principal redemption has been submitted with the 1% early-exit fee. This cycle's un-matured yield is forfeited; any already-matured yield remains in your Matured Yield balance."
+            : "Your principal redemption has been submitted. Any matured yield remains in your Matured Yield balance — withdraw it there anytime.",
         });
         load();
       } else toast.error(d.message || "Failed");
     } catch { toast.error("Failed"); }
     setLoading(null);
-  };
-
-  // Withdraw earned yield across ALL of a vault's deposits at once (from the grouped card).
-  // Loading state is managed locally by the calling card (setSubmitting), not globally.
-  const withdrawGroupYield = async (groupDeposits) => {
-    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
-    if (!groupDeposits?.length) return;
-    let ok = 0, skipped = 0, total = 0;
-    for (const d of groupDeposits) {
-      try {
-        const r = await postWithdraw({ source: "yield", depositId: d._id, asset: d.asset, walletAddress: user.walletAddress });
-        if (r.status === 201) { ok++; total += Number(r.data?.amount || 0); } else skipped++;
-      } catch { skipped++; }
-    }
-    load();
-    if (ok) {
-      setProcessingModal({
-        amount: total > 0 ? total : null,
-        asset: groupDeposits[0].asset,
-        kind: "yield",
-        note: `Earned yield from ${ok} deposit${ok > 1 ? "s" : ""} in this vault has been submitted.${skipped ? ` (${skipped} had nothing new to withdraw.)` : ""} Once approved, the funds arrive in your wallet within 4–24 hours. Track it under Withdrawals below.`,
-      });
-    } else {
-      toast(skipped ? "No new yield to withdraw (already processing or $0)" : "Nothing to withdraw", { icon: "ℹ️" });
-    }
   };
 
   const handleRedeemAll = async (depositIds) => {
@@ -532,25 +593,11 @@ export default function Portfolio() {
   // still holds the user's principal until it's redeemed, so it must stay visible — and
   // this also surfaces any deposit that was flagged matured earlier, with NO database edit.
   const activeDeposits = deposits.filter(d => d.status === "active" || d.status === "matured");
-  const nowTs = Date.now();
   const totalStaked = activeDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-  // Pending YIELD withdrawals per deposit — so a withdrawn-but-not-yet-approved amount is
-  // shown as "Processing" on that pool instead of looking wiped. (If the admin rejects it,
-  // the backend restores it and it becomes withdrawable again automatically.)
-  const pendingYieldByDeposit = {};
-  withdrawals.forEach(w => {
-    if (w.source === "yield" && w.status === "pending") {
-      const id = w.depositId?._id || w.depositId;
-      if (id) pendingYieldByDeposit[id] = (pendingYieldByDeposit[id] || 0) + Number(w.amount || 0);
-    }
-  });
-
-  const redeemableDeposits = activeDeposits.filter((d) => {
-    const lockDate = d.lockUntil ? new Date(d.lockUntil) : null;
-    const isLocked = lockDate && lockDate.getTime() > nowTs;
-    return !isLocked && !d.redemptionPending;
-  });
+  // Principal is redeemable ANYTIME now (a 1% fee applies within 30 days, handled at redeem
+  // time). We only hide deposits that already have a redemption in flight.
+  const redeemableDeposits = activeDeposits.filter((d) => !d.redemptionPending);
 
   // One position per vault+asset (display-only grouping; underlying deposits stay separate).
   const positionGroups = Object.values(
@@ -565,24 +612,37 @@ export default function Portfolio() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
       <h1 className="font-display font-bold text-3xl mb-2">Portfolio</h1>
-      <p className="text-muted mb-8">Your deposits, yield earnings, and balances</p>
+      <p className="text-muted mb-6">Your deposits, yield earnings, and balances</p>
 
+      {/* Tabs */}
+      <div className="flex gap-1 mb-8 border-b border-surface-4/40">
+        {[["overview", "Overview"], ["yield", "Matured Yield"], ["history", "History"]].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`relative px-4 py-2.5 text-sm font-display font-semibold transition-colors ${tab === k ? "text-white" : "text-muted hover:text-slate-300"}`}>
+            {label}
+            {tab === k && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (<>
       {/* Balance Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="glass p-5">
           <div className="text-xs text-muted mb-1 uppercase tracking-wider">Total Deposited</div>
           <div className="text-2xl font-display font-bold">${totalStaked.toLocaleString()}</div>
         </div>
         <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Yield</div>
+          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Matured Yield</div>
           <div className="text-2xl font-display font-bold text-brand">
             ${formatYieldBalanceUsd(user?.yieldWalletUSDT)}
           </div>
-          {(user?.yieldWalletUSDT || 0) > 0 && (
-            <button onClick={() => handleWithdraw(user.yieldWalletUSDT, "USDT", "yield")}
-              className="text-xs text-brand mt-2 hover:underline">Withdraw →</button>
+          <div className="text-[11px] text-muted mt-0.5">Withdrawable</div>
+          {((user?.yieldWalletUSDT || 0) + (user?.yieldWalletUSDC || 0)) > 0 && (
+            <button onClick={() => setTab("yield")} className="text-xs text-brand mt-2 hover:underline block">Withdraw in Matured Yield →</button>
           )}
         </div>
+        <AccruingThisCycleCard deposits={activeDeposits} />
         <div className="glass p-5">
           <div className="text-xs text-muted mb-1 uppercase tracking-wider">Referral Earnings</div>
           <div className="text-2xl font-display font-bold text-blue-400">${(user?.referralEarnings || 0).toFixed(2)}</div>
@@ -591,6 +651,11 @@ export default function Portfolio() {
               className="text-xs text-blue-400 mt-2 hover:underline">Withdraw →</button>
           )}
         </div>
+      </div>
+
+      {/* How yield works — 30-day maturation explainer */}
+      <div className="mb-8 rounded-xl border border-surface-4/40 bg-[#0d1324]/40 px-4 py-3 text-[11px] text-muted">
+        Yield accrues each 30-day cycle. When a cycle completes it <span className="text-emerald-300">matures</span> into your withdrawable <span className="text-brand">Matured Yield</span> balance and the live counter resets to 0 for the next cycle. Principal can be redeemed anytime — within the first 30 days a <span className="text-amber-300">1% fee</span> applies and that cycle's un-matured yield is forfeited.
       </div>
 
       {/* On-chain registration — verify yourself in the public registry contract */}
@@ -663,16 +728,25 @@ export default function Portfolio() {
             <GroupedPositionCard
               key={i}
               deposits={grp}
-              pendingYieldByDeposit={pendingYieldByDeposit}
-              onWithdrawYield={withdrawGroupYield}
               openRedeem={openRedeem}
               loading={loading}
-              bulkLoading={bulkLoading}
             />
           ))}
         </div>
       )}
+      </>)}
 
+      {tab === "yield" && (
+        <MaturedYieldWallet
+          user={user}
+          withdrawals={withdrawals}
+          loading={!!loading}
+          onWithdraw={handleWithdraw}
+          seed={`${user?.walletAddress || ""}:${user?._id || user?.referralCode || ""}`}
+        />
+      )}
+
+      {tab === "history" && (<>
       {/* Withdrawals History (active + completed; rejected requests are refunded and not listed) */}
       {withdrawals.filter(w => w.status !== "rejected").length > 0 && (
         <>
@@ -685,7 +759,7 @@ export default function Portfolio() {
               </tr></thead>
               <tbody>
                 {withdrawals.filter(w => w.status !== "rejected").map((w, i) => {
-                  const typeLabel = w.source === "deposit" ? "Redemption" : w.source === "referral" ? "Referral" : "Yield";
+                  const typeLabel = w.source === "deposit" ? "Redemption" : w.source === "referral" ? "Referral" : "Matured Yield";
                   const amt = w.source === "deposit" ? (w.depositId?.amount ?? w.amount) : w.amount;
                   const st = STATUS_META[w.status] || STATUS_META.pending;
                   return (
@@ -735,13 +809,16 @@ export default function Portfolio() {
         </>
       )}
 
+      {withdrawals.filter(w => w.status !== "rejected").length === 0 && yieldLogs.length === 0 && (
+        <div className="glass p-10 text-center text-muted">No withdrawals or yield history yet.</div>
+      )}
+      </>)}
+
       {redeemModal && (
         <RedeemChoiceModal
           deposit={redeemModal}
           busy={loading === redeemModal._id}
-          pendingYield={pendingYieldByDeposit[redeemModal._id] || 0}
-          onWithdrawYield={() => withdrawYieldOnly(redeemModal)}
-          onWithdrawAll={() => withdrawYieldAndExit(redeemModal)}
+          onRedeem={() => redeemPrincipal(redeemModal)}
           onClose={() => setRedeemModal(null)}
         />
       )}

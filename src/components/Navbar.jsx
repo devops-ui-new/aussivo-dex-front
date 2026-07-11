@@ -18,15 +18,21 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => { if (isLoggedIn) setShowAuth(false); }, [isLoggedIn]);
 
   const closeAuth = useCallback(() => setShowAuth(false), []);
 
   const handleConnect = async () => {
-    const addr = await connectWallet();
-    if (!addr) return; // user rejected the wallet prompt — don't open sign-in
-    setShowAuth(true);
+    if (connecting) return; // ignore repeat clicks while a request is already open
+    setConnecting(true);
+    try {
+      const addr = await connectWallet();
+      if (addr) setShowAuth(true); // else: rejected / already-pending — connectWallet already notified
+    } finally {
+      setConnecting(false);
+    }
   };
 
   return (
@@ -78,8 +84,8 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <button onClick={handleConnect} className="btn-primary !rounded-full !px-6 !py-2.5 !text-[0.8rem] !font-semibold tracking-wide">
-                Connect Wallet
+              <button onClick={handleConnect} disabled={connecting} className="btn-primary !rounded-full !px-6 !py-2.5 !text-[0.8rem] !font-semibold tracking-wide disabled:opacity-60 disabled:cursor-not-allowed">
+                {connecting ? "Connecting…" : "Connect Wallet"}
               </button>
             )}
           </div>
