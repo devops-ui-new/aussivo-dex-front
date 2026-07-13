@@ -292,8 +292,6 @@ export default function PoolDetail() {
   const monthlyApy = pool.apyMonthly ?? pool.displayApyMonthly ?? 0;
   const monthly = parseFloat(monthlyApy || 0).toFixed(2);
   const lockLabel = pool.lockDays > 0 ? `${pool.lockDays} Days` : "Flexible";
-  const earlyFeeRaw = pool.early_exit_fee_bps ?? pool.earlyExitFeeBps ?? 0;
-  const earlyFee = (earlyFeeRaw / 100).toFixed(0);
   const projectedMonthly = amount ? (parseFloat(amount) * parseFloat(monthlyApy || 0) / 100).toFixed(2) : "0.00";
   const tvlNum = (Number(pool.total_staked ?? pool.totalStaked ?? 0) + Number(pool.baseline_staked ?? 0)) / 1e6;
   const capNum = Number(pool.capacity) / 1e6;
@@ -480,11 +478,12 @@ export default function PoolDetail() {
             <div className="glass p-6">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Fees</h4>
               <p className="text-sm text-slate-400 mb-4">100% transparent fee structure.</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: "Deposit", value: "Zero", sub: "No charges" },
-                  { label: "Withdrawal", value: earlyFee > 0 ? `${earlyFee}%` : "Zero", sub: earlyFee > 0 ? "If early exit" : "No charges" },
-                  { label: "Performance", value: `${pool.performanceFeePercent ?? 20}%`, sub: "On yield only" },
+                  // Matches the backend: EARLY_EXIT_FEE_BPS = 100 bps = 1%, charged on the
+                  // principal only if redeemed within the first 30 days. No performance fee.
+                  { label: "Early withdrawal", value: "1%", sub: "Only if redeemed within 30 days" },
                 ].map((f, i) => (
                   <div key={i} className="text-center p-3 bg-[#0d1324] border border-surface-4/50 rounded-xl">
                     <div className="text-xs text-slate-500 mb-1">{f.label}</div>
