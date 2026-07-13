@@ -44,7 +44,7 @@ export default function AdminUsers() {
                 {detail.deposits?.map((d,i) => (
                   <div key={i} className="bg-surface-2/50 rounded-lg p-3 text-xs">
                     <div className="flex justify-between"><span>{d.vaultId?.name}</span><span className="text-brand font-semibold">${d.amount}</span></div>
-                    <div className="text-muted mt-1">APY: {d.apyPercent}% · Status: {d.status} · Yield paid: {d.yieldPaymentsCount}/{d.maxYieldPayments}</div>
+                    <div className="text-muted mt-1">APY: {d.apyPercent}% · Status: {d.status} · Cycles paid: {d.yieldPaymentsCount}</div>
                   </div>
                 ))}
               </div>

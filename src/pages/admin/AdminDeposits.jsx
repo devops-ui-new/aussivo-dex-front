@@ -29,7 +29,7 @@ export default function AdminDeposits() {
         <table className="w-full text-sm">
           <thead><tr className="text-xs text-muted border-b border-surface-4 bg-surface-2/30">
             <th className="text-left p-3">User</th><th className="text-left p-3">Vault</th><th className="text-right p-3">Amount</th>
-            <th className="text-right p-3">APY</th><th className="text-center p-3">Yield Paid</th><th className="text-center p-3">Status</th><th className="text-right p-3">Date</th>
+            <th className="text-right p-3">APY</th><th className="text-center p-3">Cycles Paid</th><th className="text-center p-3">Status</th><th className="text-right p-3">Date</th>
           </tr></thead>
           <tbody>
             {deposits.map(d => (
@@ -38,7 +38,7 @@ export default function AdminDeposits() {
                 <td className="p-3">{d.vaultId?.name || "—"} <span className="text-xs text-muted">{d.asset}</span></td>
                 <td className="p-3 text-right font-semibold">${d.amount?.toLocaleString()}</td>
                 <td className="p-3 text-right text-brand">{d.apyPercent}%</td>
-                <td className="p-3 text-center text-xs">{d.yieldPaymentsCount}/{d.maxYieldPayments}</td>
+                <td className="p-3 text-center text-xs">{d.yieldPaymentsCount}</td>
                 <td className="p-3 text-center"><span className={`tag text-[10px] ${d.status === 'active' ? 'tag-green' : d.status === 'matured' ? 'tag-blue' : 'tag-yellow'}`}>{d.status}</span></td>
                 <td className="p-3 text-right text-xs text-muted">{new Date(d.createdAt).toLocaleDateString()}</td>
               </tr>

@@ -180,20 +180,17 @@ function computeYield(deposit, now) {
   const perDay = monthlyYield / 30;
   const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
   const elapsedMs = Math.max(0, now - createdMs);
-  const maxPayments = Number(deposit.maxYieldPayments || 0);
-  const completedCycles = maxPayments
-    ? Math.min(Math.floor(elapsedMs / CYCLE_MS), maxPayments)
-    : Math.floor(elapsedMs / CYCLE_MS);
-  const termDone = maxPayments > 0 && completedCycles >= maxPayments;
+  // No term cap: cycles keep maturing for as long as the principal stays staked.
+  const completedCycles = Math.floor(elapsedMs / CYCLE_MS);
   const fracMs = elapsedMs - completedCycles * CYCLE_MS;
-  const liveThisCycle = termDone ? 0 : monthlyYield * (fracMs / CYCLE_MS);
-  const nextMaturationMs = termDone ? 0 : createdMs + (completedCycles + 1) * CYCLE_MS;
+  const liveThisCycle = monthlyYield * (fracMs / CYCLE_MS);
+  const nextMaturationMs = createdMs + (completedCycles + 1) * CYCLE_MS;
   const maturedSoFar = Math.max(Number(deposit.maturedYield || 0), Number(deposit.totalYieldPaid || 0));
   const unlockMs = deposit.lockUntil ? new Date(deposit.lockUntil).getTime() : 0;
   // Early-exit fee window: within 30 days of the deposit, principal redemption costs 1%.
   const feeWindowEndsMs = createdMs + CYCLE_MS;
   return {
-    amount, monthlyYield, perHour, perDay, completedCycles, maxPayments, termDone,
+    amount, monthlyYield, perHour, perDay, completedCycles,
     liveThisCycle, nextMaturationMs, maturedSoFar,
     unlockMs, locked: unlockMs > now,
     early: now < feeWindowEndsMs, feeWindowEndsMs,
@@ -223,7 +220,7 @@ function GroupedPositionCard({ deposits, openRedeem, loading }) {
     const y = computeYield(d, now);
     totalPrincipal += y.amount;
     totalLive += y.liveThisCycle; totalMatured += y.maturedSoFar; perDay += y.perDay;
-    if (!y.termDone && y.nextMaturationMs) soonestMaturation = Math.min(soonestMaturation, y.nextMaturationMs);
+    if (y.nextMaturationMs) soonestMaturation = Math.min(soonestMaturation, y.nextMaturationMs);
   }
   const maturationDate = soonestMaturation !== Infinity ? new Date(soonestMaturation) : null;
 
@@ -248,7 +245,7 @@ function GroupedPositionCard({ deposits, openRedeem, loading }) {
             <div className="text-[11px] text-muted">Matured: <span className="text-emerald-300 font-mono">+${totalMatured.toFixed(6)}</span></div>
             <div className="text-[11px] text-muted">≈ ${perDay.toFixed(6)}/day</div>
             <div className="text-[11px] text-emerald-400/80">
-              {maturationDate ? <>Next maturation {maturationDate.toLocaleDateString()}</> : "Term complete"}
+              {maturationDate ? <>Next maturation {maturationDate.toLocaleDateString()}</> : null}
             </div>
           </div>
         </div>
@@ -325,9 +322,7 @@ function LiveYield({ deposit }) {
         {live ? <>≈ ${y.perDay.toFixed(6)}/day</> : <>≈ —</>}
       </div>
       <div className="text-[11px] text-emerald-400/80">
-        {y.termDone
-          ? "Term complete"
-          : <>Matures in {nd}d {String(nh).padStart(2, "0")}h {String(nm).padStart(2, "0")}m</>}
+        Matures in {nd}d {String(nh).padStart(2, "0")}h {String(nm).padStart(2, "0")}m
       </div>
     </div>
   );
@@ -396,7 +391,7 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
         <div>
           <div className="text-sm font-semibold text-slate-100">{asset}</div>
           <div className="font-mono text-lg font-bold text-brand">${formatYieldBalanceUsd(bal)}</div>
-          {pending > 0 && <div className="text-[11px] text-amber-300/90">⟳ ${formatYieldBalanceUsd(pending)} processing</div>}
+          {pending > 0 && <div className="text-[11px] text-amber-300/90">⟳ ${formatYieldBalanceUsd(pending)} processing · typically 4–24 hours</div>}
         </div>
         <button
           onClick={() => onWithdraw(bal, asset, "yield")}
@@ -442,7 +437,7 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
           </div>
 
           <div className="mt-4 rounded-lg bg-brand/[0.06] border border-brand/15 px-3 py-2 text-[11px] text-slate-300">
-            Withdrawal requests are reviewed and disbursed Automatically. As funds are accumulated and batched from different protocls, payouts <span className="text-slate-100 font-medium">typically take 4–24 hours</span> to arrive in your connected wallet. You can track status under History.
+            Withdrawal requests are reviewed and disbursed by our team on-chain. As funds are accumulated and batched, payouts <span className="text-slate-100 font-medium">typically take 4–24 hours</span> to arrive in your connected wallet. You can track status under History.
           </div>
         </div>
       </div>
