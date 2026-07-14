@@ -385,22 +385,41 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
 
   const AssetRow = ({ asset, bal }) => {
     const pending = pendingByAsset[asset] || 0;
-    const disabled = loading || bal < 1e-6 || pending > 0;
+    const isProcessing = pending > 0;
+    const isEmpty = bal < 1e-6;
+    const disabled = loading || isEmpty || isProcessing;
+
+    // Only ONE pending yield withdrawal per asset is allowed (the backend enforces the same
+    // rule), so the button explains *why* it's unavailable rather than just greying out.
+    const label = loading ? "…"
+      : isProcessing ? "Withdrawal in progress"
+      : isEmpty ? "Nothing to withdraw"
+      : "Request Withdrawal";
+
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl border border-surface-4/40 bg-[#0d1324]/60 px-4 py-3">
         <div>
           <div className="text-sm font-semibold text-slate-100">{asset}</div>
           <div className="font-mono text-lg font-bold text-brand">${formatYieldBalanceUsd(bal)}</div>
-          {pending > 0 && <div className="text-[11px] text-amber-300/90">⟳ ${formatYieldBalanceUsd(pending)} processing · typically 4–24 hours</div>}
+          {isProcessing && <div className="text-[11px] text-amber-300/90">⟳ ${formatYieldBalanceUsd(pending)} processing · typically 4–24 hours</div>}
+          {!isProcessing && isEmpty && <div className="text-[11px] text-muted">Yield becomes withdrawable when its 30-day cycle completes</div>}
         </div>
-        <button
-          onClick={() => onWithdraw(bal, asset, "yield")}
-          disabled={disabled}
-          title={pending > 0 ? "A withdrawal for this asset is already processing" : bal < 1e-6 ? "No matured yield yet" : "Request a withdrawal"}
-          className="rounded-xl bg-gradient-to-r from-brand-dark to-brand px-4 py-2.5 text-sm font-display font-bold text-white hover:shadow-lg hover:shadow-brand/20 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {loading ? "…" : "Request Withdrawal"}
-        </button>
+        <div className="shrink-0 text-right">
+          <button
+            onClick={() => onWithdraw(bal, asset, "yield")}
+            disabled={disabled}
+            className={`rounded-xl px-4 py-2.5 text-sm font-display font-bold transition-colors ${
+              disabled
+                ? "bg-surface-4/40 text-slate-500 cursor-not-allowed"
+                : "bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20"
+            }`}
+          >
+            {label}
+          </button>
+          {isProcessing && (
+            <div className="mt-1 text-[10px] text-muted">One request at a time per asset</div>
+          )}
+        </div>
       </div>
     );
   };
@@ -654,8 +673,9 @@ export default function Portfolio() {
       </div>
 
       {/* On-chain registration — verify yourself in the public registry contract */}
-      {import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS && (() => {
-        const reg = import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS;
+      {(import.meta.env.VITE_REGISTRY_V2_ADDRESS || import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS) && (() => {
+        const reg = import.meta.env.VITE_REGISTRY_V2_ADDRESS || import.meta.env.VITE_REGISTRY_CONTRACT_ADDRESS;
+        const isV2 = !!import.meta.env.VITE_REGISTRY_V2_ADDRESS;
         const short = (a) => `${a.slice(0, 8)}…${a.slice(-6)}`;
         return (
           <div className="relative overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.08] via-surface-1/60 to-surface-1/60 p-5 mb-8">
@@ -666,9 +686,11 @@ export default function Portfolio() {
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="9" /></svg>
                 </div>
                 <div>
-                  <div className="font-display text-base font-bold text-white">Verify your registration on-chain</div>
+                  <div className="font-display text-base font-bold text-white">Verify your deposit on-chain</div>
                   <p className="mt-0.5 text-xs text-muted max-w-md">
-                    Your wallet is recorded in Aussivo's public registry contract on BSC. Anyone can verify it — open the contract, go to <span className="text-slate-300">Read → isRegistered</span>, and paste your address.
+                    {isV2
+                      ? <>Your deposited principal is attested in Aussivo's public registry on BSC. Verify it yourself — open the contract, go to <span className="text-slate-300">Read → positionOf</span>, and paste your address to see your principal, deposit count, and last-synced time.</>
+                      : <>Your wallet is recorded in Aussivo's public registry contract on BSC. Anyone can verify it — open the contract, go to <span className="text-slate-300">Read → isRegistered</span>, and paste your address.</>}
                   </p>
                   <div className="mt-3 space-y-1.5 text-xs">
                     <div className="flex items-center gap-2">
@@ -680,7 +702,7 @@ export default function Portfolio() {
                       <div className="flex items-center gap-2">
                         <span className="text-slate-500 w-16">Your wallet</span>
                         <span className="font-mono text-slate-200">{short(user.walletAddress)}</span>
-                        <button onClick={() => { navigator.clipboard?.writeText(user.walletAddress); toast.success("Your address copied — paste it into isRegistered"); }} className="text-brand hover:underline">copy</button>
+                        <button onClick={() => { navigator.clipboard?.writeText(user.walletAddress); toast.success(isV2 ? "Your address copied — paste it into positionOf" : "Your address copied — paste it into isRegistered"); }} className="text-brand hover:underline">copy</button>
                       </div>
                     )}
                   </div>

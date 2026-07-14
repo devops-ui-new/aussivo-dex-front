@@ -1,6 +1,7 @@
 import { Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import Navbar from "./components/Navbar";
+import WalletPromptModal from "./components/WalletPromptModal";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
 import Pools from "./pages/Pools";
@@ -14,6 +15,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminVaults from "./pages/admin/AdminVaults";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminDeposits from "./pages/admin/AdminDeposits";
+import AdminChainHealth from "./pages/admin/AdminChainHealth";
 import AdminSweepHealth from "./pages/admin/AdminSweepHealth";
 import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminYieldLogs from "./pages/admin/AdminYieldLogs";
@@ -25,7 +27,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!isAdmin && <><div className="bg-mesh" /><div className="bg-grid" /><Navbar /></>}
+      {!isAdmin && <><div className="bg-mesh" /><div className="bg-grid" /><Navbar /><WalletPromptModal /></>}
       <main className={`flex-1 ${!isAdmin ? "relative z-10" : ""}`}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -41,6 +43,7 @@ export default function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/deposits" element={<AdminDeposits />} />
           <Route path="/admin/sweep-health" element={<AdminSweepHealth />} />
+          <Route path="/admin/chain-health" element={<AdminChainHealth />} />
           <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
           <Route path="/admin/yield-logs" element={<AdminYieldLogs />} />
           <Route path="/admin/referrals" element={<AdminReferrals />} />
