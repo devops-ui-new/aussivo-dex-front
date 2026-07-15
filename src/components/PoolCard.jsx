@@ -5,6 +5,7 @@ export default function PoolCard({ pool, variant = "default" }) {
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
   const strategies = (pool.strategies || []).map((s, i) => ({
     name: s.name,
+    code: s.code || s.name.slice(0, 2),
     pct: Number(s.allocation ?? s.pct ?? 0),
     color: s.color || fallbackColors[i % fallbackColors.length],
   }));
@@ -55,11 +56,11 @@ export default function PoolCard({ pool, variant = "default" }) {
       {/* Strategy Icons Row */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         {strategies.map((s, i) => (
-          <div key={i} className="flex items-center gap-1.5">
+          <div key={s.name || i} className="flex items-center gap-1.5">
             <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ background: s.color }}>
-              {s.name.slice(0, 2).toUpperCase()}
+              {s.code.slice(0, 2).toUpperCase()}
             </div>
-            <span className={`text-sm ${percentClass}`}>{s.pct}%</span>
+            <span className={`text-sm tabular-nums ${percentClass}`}>{Number(s.pct).toFixed(1)}%</span>
           </div>
         ))}
       </div>
@@ -67,7 +68,7 @@ export default function PoolCard({ pool, variant = "default" }) {
       {/* Distribution Bar */}
       <div className="flex h-2 rounded-full overflow-hidden mb-4">
         {strategies.map((s, i) => (
-          <div key={i} style={{ width: `${s.pct}%`, background: s.color }} className="first:rounded-l-full last:rounded-r-full" />
+          <div key={s.name || i} style={{ width: `${s.pct}%`, background: s.color, transition: "width .9s cubic-bezier(.22,1,.36,1)" }} className="first:rounded-l-full last:rounded-r-full" />
         ))}
       </div>
 

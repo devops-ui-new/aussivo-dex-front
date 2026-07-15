@@ -30,6 +30,26 @@ export default function Pools() {
     return () => clearInterval(t);
   }, [DEMO]);
 
+  // Refresh the illustrative allocation from the BACKEND so the card weights breathe and
+  // constituents rotate, while preserving the locally-drifted TVL/investor metrics above.
+  useEffect(() => {
+    if (!DEMO) return;
+    const pull = () => {
+      fetch(`${API}/api/pools`)
+        .then(r => r.json())
+        .then(fresh => {
+          const byId = new Map(fresh.map(f => [String(f.id), f]));
+          setPools(prev => prev.map(p => {
+            const f = byId.get(String(p.id));
+            return f ? { ...p, strategies: f.strategies, allocationMeta: f.allocationMeta } : p;
+          }));
+        })
+        .catch(() => {});
+    };
+    const t = setInterval(pull, 6000);
+    return () => clearInterval(t);
+  }, [DEMO]);
+
   let filtered = pools.filter(p => {
     if (!p.active) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;

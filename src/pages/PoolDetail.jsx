@@ -6,7 +6,25 @@ import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
 import { sampleSeries } from "../utils/sampleSeries";
+import { usePolledAllocation } from "../hooks/usePolledAllocation";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
+
+// The allocation is computed on the BACKEND (helpers/allocationModel.ts). The frontend
+// just polls it. Cadence is configurable; default 4s reads smoothly with the CSS arc
+// transitions below.
+const ALLOC_POLL_MS = Number(import.meta.env.VITE_ALLOC_POLL_MS) || 4000;
+
+function formatCountdown(ms) {
+  if (ms == null || ms <= 0) return "—";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${sec.toString().padStart(2, "0")}s`;
+}
 
 // Rebalance happens at month-end. Always derive from today so the dates stay in sync:
 // next = last day of the current month, last = last day of the previous month.
@@ -40,9 +58,10 @@ function DonutChart({ strategies }) {
         const dashOffset = -((cumulative / total) * circumference);
         cumulative += s.pct;
         return (
-          <circle key={i} cx={center} cy={center} r={radius} fill="none" stroke={s.color}
+          <circle key={s.key || s.name || i} cx={center} cy={center} r={radius} fill="none" stroke={s.color}
             strokeWidth={stroke} strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-            strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`} />
+            strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`}
+            style={{ transition: "stroke-dasharray .9s cubic-bezier(.22,1,.36,1), stroke-dashoffset .9s cubic-bezier(.22,1,.36,1)" }} />
         );
       })}
       <circle cx={center} cy={center} r={radius - stroke / 2 + 2} fill="white" />
@@ -276,18 +295,37 @@ export default function PoolDetail() {
     };
   }, [depositModal?.qr?.pendingDepositId, token, API]);
 
+  // The backend already serves live strategies inside pool.strategies (when ALLOC_LIVE_MODEL
+  // is on). We additionally poll the lightweight /allocation endpoint so the panel keeps
+  // updating without re-fetching the whole vault. `live` comes from the backend's meta.
+  //
+  // IMPORTANT: this hook must run on every render (Rules of Hooks), so it is called BEFORE
+  // the `if (!pool)` early-return below. It is null-safe: with no poolId it simply idles.
+  const backendLive = pool?.allocationMeta?.live === true;
+  const polled = usePolledAllocation(pool?.id ?? pool?._id, {
+    enabled: backendLive,
+    pollMs: ALLOC_POLL_MS,
+    initial: pool?.strategies || [],
+    initialMeta: pool?.allocationMeta || null,
+  });
+
   if (!pool) return <div className="max-w-6xl mx-auto px-6 py-20"><div className="h-[500px] shimmer rounded-2xl" /></div>;
 
   const modalQr = depositModal?.qr;
 
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
-  const strategies = (pool.strategies || []).map((s, i) => ({
+
+  const rawStrategies = (polled.strategies && polled.strategies.length ? polled.strategies : pool.strategies) || [];
+  const strategies = rawStrategies.map((s, i) => ({
+    key: s.protocol || s.name || String(i),
     name: s.name,
+    code: s.code || (s.name || "").slice(0, 2),
     pct: Number(s.allocation ?? s.pct ?? 0),
     color: s.color || fallbackColors[i % fallbackColors.length],
     apy: s.apy || "—",
     status: s.status || (String(s.name || "").toLowerCase().includes("reserve") ? "Liquid" : "Active"),
   }));
+  const allocLive = polled.live || backendLive;
   const apy = parseFloat(pool.apy || 0).toFixed(1);
   const monthlyApy = pool.apyMonthly ?? pool.displayApyMonthly ?? 0;
   const monthly = parseFloat(monthlyApy || 0).toFixed(2);
@@ -396,9 +434,23 @@ export default function PoolDetail() {
             <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
           </div>
 
-          {/* Constituents */}
+          {/* Constituents — illustrative target allocation (not live positions) */}
           <div className="glass p-6">
-            <h3 className="font-display font-semibold text-slate-100 text-lg mb-6">Constituents</h3>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
+                {allocLive && (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {/* Show the countdown only for a short (demo) rebalance period so it
+                        doesn't clash with the monthly-rebalance card below. */}
+                    {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
+                      ? <>Live model · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
+                      : <>Live</>}
+                  </span>
+                )}
+              </div>
+            </div>
             <div className="grid md:grid-cols-5 gap-6">
               {/* Donut */}
               <div className="md:col-span-2 flex flex-col items-center">
@@ -420,8 +472,8 @@ export default function PoolDetail() {
                     <tr className="text-xs text-slate-400 border-b border-surface-4/40">
                       <th className="text-left pb-3 font-medium">Strategy</th>
                       <th className="text-left pb-3 font-medium">Yield</th>
-                      <th className="text-left pb-3 font-medium">Allocation</th>
-                      <th className="text-right pb-3 font-medium">Status</th>
+                      <th className="text-left pb-3 font-medium">Target weight</th>
+                      <th className="text-right pb-3 font-medium">Type</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -436,7 +488,7 @@ export default function PoolDetail() {
                           </div>
                         </td>
                         <td className="py-3.5 text-sm text-slate-300">{s.apy}</td>
-                        <td className="py-3.5 text-sm font-semibold text-slate-200">{s.pct}%</td>
+                        <td className="py-3.5 text-sm font-semibold text-slate-200 tabular-nums">{Number(s.pct).toFixed(1)}%</td>
                         <td className="py-3.5 text-right">
                           <span className={`text-xs font-semibold ${String(s.status).toLowerCase().includes("liquid") ? "text-blue-500" : "text-emerald-500"}`}>
                             {s.status}
