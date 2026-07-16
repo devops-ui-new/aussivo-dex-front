@@ -465,29 +465,29 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
+            {/* <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p> */}
           </div>
 
           {/* Constituents — illustrative target allocation (not live positions) */}
           <div className="glass p-6">
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-semibold text-slate-100 text-lg">Illustrative Target Allocation</h3>
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span>
+                <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
+                {/* <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span> */}
                 {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     {/* Show the countdown only for a short (demo) rebalance period so it
                         doesn't clash with the monthly-rebalance card below. */}
                     {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
-                      ? <>Live model · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
-                      : <>Live model</>}
+                      ? <>Live · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
+                      : <>Live</>}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted mt-1 max-w-xl">
+              {/* <p className="text-xs text-muted mt-1 max-w-xl">
                 A model of how this strategy is designed to allocate. These are target weights, not a live on-chain position report, and do not represent funds currently deployed to the named protocols.
-              </p>
+              </p> */}
             </div>
             <div className="grid md:grid-cols-5 gap-6">
               {/* Donut */}
@@ -536,9 +536,9 @@ export default function PoolDetail() {
                     ))}
                   </tbody>
                 </table>
-                <p className="text-[11px] text-slate-500 mt-4 pt-3 border-t border-surface-4/30">
+                {/* <p className="text-[11px] text-slate-500 mt-4 pt-3 border-t border-surface-4/30">
                   Target model only. Protocol names indicate the strategy's intended venues and are not a statement that capital is presently allocated to them.
-                </p>
+                </p> */}
               </div>
             </div>
           </div>
