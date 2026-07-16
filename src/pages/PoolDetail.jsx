@@ -9,6 +9,7 @@ import { sampleSeries } from "../utils/sampleSeries";
 import { usePolledAllocation } from "../hooks/usePolledAllocation";
 import { GenerativeArt } from "../components/GenerativeArt";
 import Avatar from "../components/Avatar";
+import { ProtocolChip, PoweredBy } from "../components/ProtocolIcons";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
 // The allocation is computed on the BACKEND (helpers/allocationModel.ts). The frontend
@@ -321,6 +322,7 @@ export default function PoolDetail() {
   const strategies = rawStrategies.map((s, i) => ({
     key: s.protocol || s.name || String(i),
     name: s.name,
+    protocol: s.protocol || s.name,
     code: s.code || (s.name || "").slice(0, 2),
     pct: Number(s.allocation ?? s.pct ?? 0),
     color: s.color || fallbackColors[i % fallbackColors.length],
@@ -417,15 +419,16 @@ export default function PoolDetail() {
                 </div>
                 <div className="mt-3 flex items-center gap-3">
                   <div className="flex items-center">
-                    {strategies.slice(0, 4).map((s, i) => (
-                      <div key={i} className="h-7 w-7 rounded-full text-[8px] font-bold text-white flex items-center justify-center ring-2 ring-surface-1" style={{ background: s.color, marginLeft: i > 0 ? "-8px" : 0, zIndex: 5 - i }}>
-                        {s.code || s.name.slice(0, 2)}
+                    {strategies.slice(0, 5).map((s, i) => (
+                      <div key={i} className="rounded-lg ring-2 ring-surface-1" style={{ marginLeft: i > 0 ? "-8px" : 0, zIndex: 6 - i }}>
+                        <ProtocolChip strategy={s.protocol} size={28} />
                       </div>
                     ))}
-                    {strategies.length > 4 && <span className="ml-1 text-xs text-slate-500">+{strategies.length - 4}</span>}
+                    {strategies.length > 5 && <span className="ml-1.5 text-xs text-slate-500">+{strategies.length - 5}</span>}
                   </div>
                   <span className="text-xs text-slate-400">{pool.investorsLabel || `${(Number(pool.totalUsers || 0) + Number(pool.baseline_users ?? 0)).toLocaleString()}+`} investors</span>
                 </div>
+                <PoweredBy strategies={strategies} size={20} className="mt-3" />
               </div>
             </div>
             <button className="text-sm text-slate-300 border border-surface-4/60 rounded-lg px-4 py-2 hover:bg-[#0d1324] hover:border-brand/40 transition-colors backdrop-blur">☆ Watchlist</button>
@@ -465,29 +468,29 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-            {/* <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p> */}
+            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
           </div>
 
           {/* Constituents — illustrative target allocation (not live positions) */}
           <div className="glass p-6">
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
-                {/* <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span> */}
+                <h3 className="font-display font-semibold text-slate-100 text-lg">Illustrative Target Allocation</h3>
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span>
                 {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     {/* Show the countdown only for a short (demo) rebalance period so it
                         doesn't clash with the monthly-rebalance card below. */}
                     {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
-                      ? <>Live · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
-                      : <>Live</>}
+                      ? <>Live model · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
+                      : <>Live model</>}
                   </span>
                 )}
               </div>
-              {/* <p className="text-xs text-muted mt-1 max-w-xl">
+              <p className="text-xs text-muted mt-1 max-w-xl">
                 A model of how this strategy is designed to allocate. These are target weights, not a live on-chain position report, and do not represent funds currently deployed to the named protocols.
-              </p> */}
+              </p>
             </div>
             <div className="grid md:grid-cols-5 gap-6">
               {/* Donut */}
@@ -496,7 +499,7 @@ export default function PoolDetail() {
                 <div className="flex flex-wrap gap-3 mt-4 justify-center">
                   {strategies.map((s, i) => (
                     <div key={i} className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded-sm" style={{ background: s.color }} />
+                      <ProtocolChip strategy={s.protocol} size={18} />
                       <span className="text-xs text-slate-400">{s.name}</span>
                     </div>
                   ))}
@@ -519,9 +522,7 @@ export default function PoolDetail() {
                       <tr key={i} className="border-b border-surface-4/30 last:border-0">
                         <td className="py-3.5">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{ background: s.color }}>
-                            {s.name?.slice(0, 2)}
-                            </div>
+                            <ProtocolChip strategy={s.protocol} size={26} />
                             <span className="text-sm font-medium text-slate-200">{s.name}</span>
                           </div>
                         </td>
@@ -536,9 +537,9 @@ export default function PoolDetail() {
                     ))}
                   </tbody>
                 </table>
-                {/* <p className="text-[11px] text-slate-500 mt-4 pt-3 border-t border-surface-4/30">
+                <p className="text-[11px] text-slate-500 mt-4 pt-3 border-t border-surface-4/30">
                   Target model only. Protocol names indicate the strategy's intended venues and are not a statement that capital is presently allocated to them.
-                </p> */}
+                </p>
               </div>
             </div>
           </div>

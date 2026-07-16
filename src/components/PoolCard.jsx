@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { useCountUp } from "../hooks/useCountUp";
 import Avatar from "./Avatar";
+import { ProtocolChip } from "./ProtocolIcons";
 
 export default function PoolCard({ pool, variant = "default" }) {
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
   const strategies = (pool.strategies || []).map((s, i) => ({
     name: s.name,
+    protocol: s.protocol || s.name,
     code: s.code || s.name.slice(0, 2),
     pct: Number(s.allocation ?? s.pct ?? 0),
     color: s.color || fallbackColors[i % fallbackColors.length],
@@ -62,13 +64,11 @@ export default function PoolCard({ pool, variant = "default" }) {
         </div>
       </div>
 
-      {/* Strategy Icons Row */}
+      {/* Strategy Icons Row — real protocol marks */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         {strategies.map((s, i) => (
           <div key={s.name || i} className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ background: s.color }}>
-              {s.code.slice(0, 2).toUpperCase()}
-            </div>
+            <ProtocolChip strategy={s.protocol} size={22} />
             <span className={`text-sm tabular-nums ${percentClass}`}>{Number(s.pct).toFixed(1)}%</span>
           </div>
         ))}

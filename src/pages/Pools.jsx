@@ -2,6 +2,7 @@ import { API } from "../config/api";
 import { useEffect, useState } from "react";
 import PoolCard from "../components/PoolCard";
 import ActivityFeed from "../components/ActivityFeed";
+import { PoweredBy } from "../components/ProtocolIcons";
 
 export default function Pools() {
   // API imported from config
@@ -91,6 +92,9 @@ export default function Pools() {
               </span>
             ))}
           </div>
+          {pools.length > 0 && (
+            <PoweredBy strategies={pools.flatMap((p) => p.strategies || [])} size={22} className="mt-5" />
+          )}
         </div>
       </div>
 
