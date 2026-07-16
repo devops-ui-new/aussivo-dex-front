@@ -476,7 +476,7 @@ export default function PoolDetail() {
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span>
+                {/* <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span> */}
                 {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
