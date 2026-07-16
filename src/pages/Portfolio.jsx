@@ -20,61 +20,85 @@ const STATUS_META = {
  * early-exit fee applies AND the current (un-matured) cycle's yield is forfeited. Yield that has
  * already matured is kept — it lives in the separate "Matured Yield" balance and is withdrawn there.
  */
-function RedeemChoiceModal({ deposit, busy, onRedeem, onClose }) {
+function RedeemWizard({ deposit, busy, onConfirm, onClose }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const [step, setStep] = useState(1);
+  const [ack1, setAck1] = useState(false);   // matured stays / cycle forfeited
+  const [ackFee, setAckFee] = useState(false); // 1% early-exit fee (only when early)
+  const [ackFinal, setAckFinal] = useState(false); // final confirmation
 
   const asset = deposit?.asset || "";
   const principal = Number(deposit?.amount || 0);
   const vaultName = deposit?.vaultId?.name || "this vault";
-
   const y = computeYield(deposit || {}, now);
   const fee = y.early ? principal * 0.01 : 0;
   const net = principal - fee;
   const forfeited = y.liveThisCycle;
-
-  // Countdown to the end of the 1% fee window (30 days from deposit).
   const ms = Math.max(0, y.feeWindowEndsMs - now);
   const dd = Math.floor(ms / 86400000), hh = Math.floor((ms % 86400000) / 3600000), mm = Math.floor((ms % 3600000) / 60000);
+  const canContinue = ack1 && (!y.early || ackFee);
+
+  const Check = ({ checked, onChange, tone = "brand", children }) => (
+    <button type="button" onClick={() => onChange(!checked)}
+      className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${checked ? (tone === "amber" ? "border-amber-400/40 bg-amber-500/[0.07]" : "border-brand/40 bg-brand/[0.07]") : "border-surface-4/50 bg-[#0d1324] hover:border-surface-4"}`}>
+      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${checked ? (tone === "amber" ? "border-amber-400 bg-amber-400 text-black" : "border-brand bg-brand text-black") : "border-slate-500"}`}>
+        {checked && <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2"><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      </span>
+      <span className="text-[13px] leading-snug text-slate-200">{children}</span>
+    </button>
+  );
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4" onClick={onClose}>
-      <div className="glass relative w-full max-w-md rounded-2xl p-7 ring-1 ring-white/[0.06]" onClick={e => e.stopPropagation()}>
-        <h3 className="font-display text-xl font-bold text-white text-center">Redeem principal</h3>
-
-        <div className="mt-4 rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-slate-400">Principal in {vaultName}</span><span className="font-semibold text-slate-100">${principal.toLocaleString()} {asset}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">Matured yield (kept)</span><span className="font-mono font-semibold text-emerald-400">${y.maturedSoFar.toFixed(6)} {asset}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">This cycle's yield (forfeited)</span><span className="font-mono font-semibold text-slate-400">−${forfeited.toFixed(6)} {asset}</span></div>
-          {y.early && (
-            <div className="flex justify-between"><span className="text-amber-300/90">Early-exit fee (1%)</span><span className="font-mono font-semibold text-amber-300">−${fee.toFixed(6)} {asset}</span></div>
-          )}
-          <div className="flex justify-between border-t border-surface-4/40 pt-2"><span className="text-slate-300">You receive</span><span className="font-mono font-bold text-white">${net.toFixed(6)} {asset}</span></div>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-8" onClick={onClose}>
+      <div className="glass relative w-full max-w-md rounded-2xl p-6 ring-1 ring-white/[0.06]" onClick={e => e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-muted">Step {step} of 2</span>
+          <button onClick={onClose} className="text-lg leading-none text-slate-500 hover:text-slate-300">✕</button>
+        </div>
+        <div className="mb-4 flex gap-1.5">
+          <span className={`h-1 flex-1 rounded-full ${step >= 1 ? "bg-brand" : "bg-white/10"}`} />
+          <span className={`h-1 flex-1 rounded-full ${step >= 2 ? "bg-brand" : "bg-white/10"}`} />
         </div>
 
-        {y.early ? (
-          <div className="mt-3 rounded-lg bg-amber-500/[0.07] border border-amber-500/20 px-3 py-2 text-[11px] text-amber-200/90">
-            You're within the first 30 days ({dd}d {String(hh).padStart(2,"0")}h {String(mm).padStart(2,"0")}m left). Redeeming now costs a 1% fee and forfeits this cycle's un-matured yield. Wait until the cycle completes to redeem fee-free and let this cycle's yield mature.
-          </div>
+        {step === 1 ? (
+          <>
+            <h3 className="font-display text-xl font-bold text-white">Review your redemption</h3>
+            <p className="mt-1 text-[13px] text-slate-400">Returns your principal from {vaultName} and closes this deposit.</p>
+            <div className="mt-4 space-y-2 rounded-xl border border-surface-4/50 bg-[#0d1324] p-4 text-sm">
+              <div className="flex justify-between"><span className="text-slate-400">Principal</span><span className="font-semibold text-slate-100">${principal.toLocaleString()} {asset}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Matured yield (kept)</span><span className="font-mono font-semibold text-emerald-400">${y.maturedSoFar.toFixed(6)} {asset}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">This cycle's yield (forfeited)</span><span className="font-mono font-semibold text-slate-400">−${forfeited.toFixed(6)} {asset}</span></div>
+              {y.early && <div className="flex justify-between"><span className="text-amber-300/90">Early-exit fee (1%)</span><span className="font-mono font-semibold text-amber-300">−${fee.toFixed(6)} {asset}</span></div>}
+              <div className="flex justify-between border-t border-surface-4/40 pt-2"><span className="text-slate-300">You receive</span><span className="font-mono font-bold text-white">${net.toFixed(6)} {asset}</span></div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <Check checked={ack1} onChange={setAck1}>My <b className="text-emerald-300">matured yield</b> stays in my Matured Yield balance; this cycle's un-matured yield is forfeited on exit.</Check>
+              {y.early && <Check checked={ackFee} onChange={setAckFee} tone="amber">A <b className="text-amber-300">1% early-exit fee</b> applies — I'm within the first 30 days ({dd}d {String(hh).padStart(2, "0")}h {String(mm).padStart(2, "0")}m left).</Check>}
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button onClick={onClose} className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-slate-400 hover:text-slate-200">Cancel</button>
+              <button onClick={() => setStep(2)} disabled={!canContinue} className="flex-1 rounded-xl bg-gradient-to-r from-brand-dark to-brand py-2.5 text-sm font-display font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Continue →</button>
+            </div>
+          </>
         ) : (
-          <div className="mt-3 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2 text-[11px] text-emerald-200/80">
-            No early-exit fee. Your matured yield stays in your Matured Yield balance — withdraw it there anytime. Only this cycle's un-matured portion is forfeited on exit.
-          </div>
+          <>
+            <h3 className="font-display text-xl font-bold text-white">Confirm withdrawal</h3>
+            <p className="mt-1 text-[13px] text-slate-400">This submits an on-chain redemption and can't be undone once processing.</p>
+            <div className="mt-4 rounded-xl border border-brand/20 bg-brand/[0.06] p-4 text-center">
+              <div className="text-[11px] uppercase tracking-wider text-muted">You will receive</div>
+              <div className="mt-1 font-display text-3xl font-bold text-brand">${net.toFixed(2)} <span className="text-lg">{asset}</span></div>
+              <div className="mt-1 text-[12px] text-slate-400">to your connected wallet · arrives in 4–24h</div>
+            </div>
+            <div className="mt-4">
+              <Check checked={ackFinal} onChange={setAckFinal}>I confirm I want to redeem my principal and close this position.</Check>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => setStep(1)} disabled={busy} className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50">← Back</button>
+              <button onClick={onConfirm} disabled={!ackFinal || busy} className="flex-1 rounded-xl bg-gradient-to-r from-brand-dark to-brand py-2.5 text-sm font-display font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "Submitting…" : "Confirm withdrawal"}</button>
+            </div>
+          </>
         )}
-
-        <div className="mt-6 space-y-2.5">
-          <button
-            onClick={onRedeem}
-            disabled={busy}
-            className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3.5 font-display font-bold text-white hover:shadow-lg hover:shadow-brand/20 disabled:opacity-50"
-          >
-            {busy ? "Submitting…" : y.early ? `Redeem now — 1% fee (get $${net.toFixed(2)})` : "Redeem principal & exit"}
-            <span className="block text-[11px] font-normal text-white/80">Returns your principal and closes this deposit</span>
-          </button>
-          <button onClick={onClose} disabled={busy} className="w-full rounded-xl py-2.5 text-sm font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-50">
-            Keep earning
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -519,7 +543,7 @@ function GroupedPositionCard({ deposits, onOpen }) {
 
 /** Per-deposit row inside GroupDetailModal. The WHOLE row is tap-to-open (large target,
  *  clear chevron + hint); Redeem is a separate, prominent button. Sized for easy reading. */
-function DepositRow({ deposit, loading, onRedeem, onOpenDeposit }) {
+function DepositRow({ deposit, onOpenDeposit }) {
   const now = useNow();
   const y = computeYield(deposit, now);
   const asset = deposit.asset;
@@ -579,21 +603,10 @@ function DepositRow({ deposit, loading, onRedeem, onOpenDeposit }) {
         </div>
       </div>
 
-      {/* actions row: clear tap hint + Redeem */}
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 text-base font-semibold text-brand group-hover:underline">
-          Tap to view full details
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </span>
-        {!deposit.redemptionPending && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRedeem(deposit); }}
-            disabled={loading === deposit._id}
-            className="rounded-xl border border-brand/30 bg-brand/15 px-5 py-2.5 text-base font-bold text-brand transition-colors hover:bg-brand/25 disabled:opacity-50"
-          >
-            {loading === deposit._id ? "…" : "Redeem"}
-          </button>
-        )}
+      {/* tap hint */}
+      <div className="mt-3 flex items-center justify-center gap-1.5 text-base font-semibold text-brand group-hover:underline">
+        Tap to view full details &amp; redeem
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </div>
     </div>
   );
@@ -755,15 +768,17 @@ function PositionDetailModal({ deposit, withdrawals, onRedeem, onClose }) {
           </div>
         </div>
 
-        {/* actions */}
+        {/* actions — the ONE and only principal-withdrawal entry point */}
         <div className="shrink-0 border-t border-surface-4/40 p-4">
           {deposit.redemptionPending ? (
             <div className="rounded-xl bg-yellow-500/[0.08] border border-yellow-500/20 py-3 text-center text-sm font-semibold text-yellow-300">Redemption in progress · typically 4–24 hours</div>
           ) : (
-            <button onClick={() => onRedeem(deposit)} className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3 font-display font-bold text-white transition-all hover:shadow-lg hover:shadow-brand/20">
-              Redeem principal &amp; exit
-              <span className="block text-[11px] font-normal text-white/80">Matured yield stays in your Matured Yield balance</span>
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] leading-tight text-slate-400">Matured yield stays in your<br className="hidden sm:block" /> Matured Yield balance</span>
+              <button onClick={() => onRedeem(deposit)} className="shrink-0 rounded-lg bg-gradient-to-r from-brand-dark to-brand px-5 py-2 text-sm font-display font-bold text-white transition-all hover:shadow-lg hover:shadow-brand/20">
+                Redeem principal
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -776,7 +791,7 @@ function PositionDetailModal({ deposit, withdrawals, onRedeem, onClose }) {
  * list of every underlying deposit (each redeemable / openable). Reads deposits live from the
  * parent so it stays current across refreshes. Handles 1 or 100 deposits gracefully.
  */
-function GroupDetailModal({ deposits, loading, onRedeem, onRedeemAll, onOpenDeposit, onClose }) {
+function GroupDetailModal({ deposits, onOpenDeposit, onClose }) {
   const now = useNow();
   const [sort, setSort] = useState("newest");
   if (!deposits || deposits.length === 0) return null;
@@ -787,14 +802,12 @@ function GroupDetailModal({ deposits, loading, onRedeem, onRedeemAll, onOpenDepo
   const vaultId = typeof first.vaultId === "object" ? first.vaultId?._id : first.vaultId;
 
   let principal = 0, accruing = 0, matured = 0, perDay = 0, soonest = Infinity, locked = 0, apyW = 0;
-  const redeemable = [];
   for (const d of deposits) {
     const y = computeYield(d, now);
     principal += y.amount; accruing += y.liveThisCycle; matured += y.maturedSoFar; perDay += y.perDay;
     apyW += y.amount * Number(d.poolApy ?? d.apyPercent ?? 0);
     if (y.nextMaturationMs) soonest = Math.min(soonest, y.nextMaturationMs);
     if (y.locked) locked++;
-    if (!d.redemptionPending) redeemable.push(d._id);
   }
   const blendedApy = principal > 0 ? apyW / principal : Number(first.apyPercent || 0);
   const nms = soonest !== Infinity ? Math.max(0, soonest - now) : 0;
@@ -844,31 +857,23 @@ function GroupDetailModal({ deposits, loading, onRedeem, onRedeemAll, onOpenDepo
           </div>
 
           {/* controls */}
-          <div className="mt-5 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-200">Deposits</span>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg border border-surface-4/50 bg-[#0d1324] px-3 py-1.5 text-sm text-slate-200 outline-none">
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-                <option value="largest">Largest</option>
-              </select>
-            </div>
-            {redeemable.length > 0 && (
-              <button onClick={() => onRedeemAll(redeemable)}
-                className="rounded-xl border border-brand/30 bg-brand/15 px-4 py-2 text-sm font-bold text-brand hover:bg-brand/25">
-                Redeem all ({redeemable.length}) →
-              </button>
-            )}
+          <div className="mt-5 flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-200">Deposits</span>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg border border-surface-4/50 bg-[#0d1324] px-3 py-1.5 text-sm text-slate-200 outline-none">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="largest">Largest</option>
+            </select>
           </div>
 
           <p className="mt-3 rounded-xl border border-brand/15 bg-brand/[0.06] px-4 py-2.5 text-sm text-slate-300">
-            👉 Tap any deposit below to open its full history and details.
+            👉 Tap any deposit below to open its full details, history, and to redeem.
           </p>
 
           {/* per-deposit list */}
           <div className="mt-3 space-y-3">
             {sorted.map((d, i) => (
-              <DepositRow key={d._id || i} deposit={d} loading={loading} onRedeem={onRedeem} onOpenDeposit={onOpenDeposit} />
+              <DepositRow key={d._id || i} deposit={d} onOpenDeposit={onOpenDeposit} />
             ))}
           </div>
         </div>
@@ -887,7 +892,6 @@ export default function Portfolio() {
   const [detailDeposit, setDetailDeposit] = useState(null); // deposit shown in the block-explorer detail modal
   const [detailGroupKey, setDetailGroupKey] = useState(null); // pool (vault+asset) shown in the grouped breakdown modal
   const [loading, setLoading] = useState(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
   const [tab, setTab] = useState("overview"); // overview | yield | history
 
   const hdr = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
@@ -956,33 +960,6 @@ export default function Portfolio() {
     setLoading(null);
   };
 
-  const handleRedeemAll = async (depositIds) => {
-    if (!user?.walletAddress) { toast.error("No wallet connected"); return; }
-    if (!depositIds?.length) return;
-    if (!confirm(`Redeem all ${depositIds.length} redeemable deposits? Your principal will be returned to your wallet once processed on-chain.`)) return;
-    setBulkLoading(true);
-    try {
-      let ok = 0;
-      let skipped = 0;
-      for (const depositId of depositIds) {
-        const res = await fetch(`${API}/api/user/withdraw`, {
-          method: "POST",
-          headers: hdr(),
-          body: JSON.stringify({ source: "deposit", depositId, walletAddress: user.walletAddress }),
-        });
-        const d = await res.json();
-        if (d?.status === 201) ok++;
-        else skipped++;
-      }
-      toast.success(`Submitted ${ok} redemption${ok === 1 ? "" : "s"}${skipped ? ` (${skipped} already pending/unavailable)` : ""}`);
-      load();
-    } catch {
-      toast.error("Failed to redeem all");
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
   if (!token) return (
     <div className="max-w-4xl mx-auto px-6 py-20 text-center">
       <h2 className="font-display font-bold text-2xl mb-4">Sign In Required</h2>
@@ -995,10 +972,6 @@ export default function Portfolio() {
   // this also surfaces any deposit that was flagged matured earlier, with NO database edit.
   const activeDeposits = deposits.filter(d => d.status === "active" || d.status === "matured");
   const totalStaked = activeDeposits.reduce((sum, d) => sum + (d.amount || 0), 0);
-
-  // Principal is redeemable ANYTIME now (a 1% fee applies within 30 days, handled at redeem
-  // time). We only hide deposits that already have a redemption in flight.
-  const redeemableDeposits = activeDeposits.filter((d) => !d.redemptionPending);
 
   // Group deposits by pool (vault + asset) so the grid shows ONE card per pool regardless of
   // how many deposits it holds. The drill-down modal reads the group live via this same key.
@@ -1073,15 +1046,6 @@ export default function Portfolio() {
       {/* Active Positions — one card per pool */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display font-semibold text-2xl">Active Positions <span className="text-muted text-lg font-normal">({positionGroups.length} pool{positionGroups.length === 1 ? "" : "s"} · {activeDeposits.length} deposit{activeDeposits.length === 1 ? "" : "s"})</span></h2>
-        {redeemableDeposits.length > 0 && (
-          <button
-            onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
-            disabled={bulkLoading}
-            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50"
-          >
-            {bulkLoading ? "Redeeming..." : "Redeem all →"}
-          </button>
-        )}
       </div>
       {activeDeposits.length === 0 ? (
         <div className="glass p-10 text-center">
@@ -1234,9 +1198,6 @@ export default function Portfolio() {
           <style>{`@keyframes wpmFade{from{opacity:0}to{opacity:1}}@keyframes wpmPop{0%{transform:scale(.94);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
           <GroupDetailModal
             deposits={detailGroupDeposits}
-            loading={loading}
-            onRedeem={(d) => openRedeem(d)}
-            onRedeemAll={(ids) => handleRedeemAll(ids)}
             onOpenDeposit={(d) => setDetailDeposit(d)}
             onClose={() => setDetailGroupKey(null)}
           />
@@ -1247,15 +1208,15 @@ export default function Portfolio() {
           <PositionDetailModal
             deposit={detailDeposit}
             withdrawals={withdrawals}
-            onRedeem={(d) => { setDetailDeposit(null); openRedeem(d); }}
+            onRedeem={(d) => openRedeem(d)}
             onClose={() => setDetailDeposit(null)}
           />
         </>, document.body)}
       {redeemModal && createPortal(
-        <RedeemChoiceModal
+        <RedeemWizard
           deposit={redeemModal}
           busy={loading === redeemModal._id}
-          onRedeem={() => redeemPrincipal(redeemModal)}
+          onConfirm={() => redeemPrincipal(redeemModal)}
           onClose={() => setRedeemModal(null)}
         />, document.body)}
       {processingModal && createPortal(<WithdrawProcessingModal info={processingModal} onClose={() => setProcessingModal(null)} />, document.body)}

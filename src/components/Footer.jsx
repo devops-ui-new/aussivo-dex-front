@@ -14,7 +14,7 @@ import {
 const SOCIAL_LINKS = [
   {
     label: "LinkedIn",
-    href: "https://www.linkedin.com/checkpoint/challenge/AgGg59dE-HE30wAAAZ4We1QHr-TC3ut3p5km2r0EFETU84VAx5lRZN05RxvcYWas-miZA5pieFRsV1Aqjms5mgwhEbx-Iw?ut=2VHqNYTf9oiYg1",
+    href: "https://www.linkedin.com/company/aussivo/?viewAsMember=true",
     Icon: IconLinkedIn,
   },
   { label: "X", href: "https://x.com/aussivo", Icon: IconX },
