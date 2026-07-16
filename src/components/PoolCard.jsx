@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useCountUp } from "../hooks/useCountUp";
+import Avatar from "./Avatar";
 
 export default function PoolCard({ pool, variant = "default" }) {
   const fallbackColors = ["#B6509E", "#00D395", "#3B82F6", "#F59E0B", "#FF6B6B", "#6DC6B1"];
@@ -22,7 +23,7 @@ export default function PoolCard({ pool, variant = "default" }) {
   const isHomeDark = variant === "home-dark";
 
   const cardClass = isHomeDark
-    ? "block rounded-2xl border border-brand/35 p-4 bg-[linear-gradient(0deg,rgba(10,10,10,0.7),rgba(10,10,10,0.7)),linear-gradient(106.04deg,rgba(0,0,0,0.34)_70%,rgba(56,255,126,0.09)_100%)] shadow-[0_0_18px_rgba(0,230,118,0.08)] hover:border-brand/55 transition-all duration-300 group"
+    ? "relative overflow-hidden block rounded-2xl border border-brand/35 p-4 bg-[linear-gradient(0deg,rgba(10,10,10,0.7),rgba(10,10,10,0.7)),linear-gradient(106.04deg,rgba(0,0,0,0.34)_70%,rgba(56,255,126,0.09)_100%)] shadow-[0_0_18px_rgba(0,230,118,0.08)] hover:border-brand/55 hover:shadow-[0_0_28px_rgba(0,230,118,0.14)] hover:-translate-y-0.5 transition-all duration-300 group"
     : "block bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:shadow-brand/5 transition-all duration-300 group";
   const titleClass = isHomeDark ? "text-slate-100" : "text-gray-900 group-hover:text-brand-dark";
   const apyLabelClass = isHomeDark ? "text-slate-400" : "text-gray-400";
@@ -42,10 +43,18 @@ export default function PoolCard({ pool, variant = "default" }) {
 
   return (
     <Link to={`/pool/${pool.id}`} className={cardClass}>
+      {isHomeDark && <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-brand/10 blur-3xl" />}
       {/* Header Row */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className={`font-display font-medium text-[1.7rem] leading-none transition-colors ${titleClass}`}>{pool.name}</h3>
-        <div className="flex items-center gap-1.5">
+      <div className="relative flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          {isHomeDark && (
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10 bg-surface-4">
+              <Avatar seed={pool.id || pool.name} style="rings" size={44} radius={16} className="h-full w-full" />
+            </div>
+          )}
+          <h3 className={`font-display font-medium text-[1.7rem] leading-none transition-colors truncate ${titleClass}`}>{pool.name}</h3>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className={`font-display font-bold text-lg ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
             {isPositive ? "▲" : "▼"} {pool.apy}%
           </span>

@@ -1,6 +1,7 @@
 import { API } from "../config/api";
 import { useEffect, useState } from "react";
 import PoolCard from "../components/PoolCard";
+import ActivityFeed from "../components/ActivityFeed";
 
 export default function Pools() {
   // API imported from config
@@ -66,10 +67,32 @@ export default function Pools() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10">
-      <h1 className="font-display font-bold text-3xl text-white mb-2">Yield Vaults</h1>
-      <p className="text-slate-400 mb-8 max-w-xl">
-        Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
-      </p>
+      <div className="relative mb-8 overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-br from-brand/[0.07] via-surface-1/40 to-transparent p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand/10 blur-3xl" />
+        <div className="relative">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/[0.08] px-3 py-1 text-[11px] font-semibold text-brand">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" /> Live on-chain vaults
+          </div>
+          <h1 className="font-display font-bold text-3xl sm:text-4xl text-white mb-2">
+            Yield <span className="bg-gradient-to-r from-brand to-emerald-300 bg-clip-text text-transparent">Vaults</span>
+          </h1>
+          <p className="text-slate-400 max-w-2xl">
+            Expert-curated yield strategies across DeFi protocols. Each vault deploys capital into diversified, audited strategies to maximize risk-adjusted returns.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
+            {[
+              { t: "Non-custodial", d: "M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z" },
+              { t: "On-chain verifiable", d: "M9 12l2 2 4-4M12 3l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z" },
+              { t: "Audited strategies", d: "M20 6L9 17l-5-5" },
+            ].map((b) => (
+              <span key={b.t} className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-slate-300">
+                <svg className="h-3.5 w-3.5 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={b.d} /></svg>
+                {b.t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Search */}
       <div className="flex items-center gap-3 mb-6">
@@ -129,6 +152,10 @@ export default function Pools() {
           <p className="text-sm">Try adjusting your filters</p>
         </div>
       )}
+
+      <div className="mt-8">
+        <ActivityFeed limit={8} />
+      </div>
     </div>
   );
 }

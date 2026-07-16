@@ -1,4 +1,7 @@
 import brandLogo from "../assets/branding/logo-aussivo.png";
+import toast from "react-hot-toast";
+import OnChainTicker from "./OnChainTicker";
+import { CONTRACTS, explorerAddress, shortAddr } from "../config/chain";
 import {
   IconDiscord,
   IconInstagram,
@@ -122,6 +125,29 @@ export default function Footer() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* On-chain: live network status + verifiable deployed contracts */}
+        <div className="flex flex-col gap-4 border-b border-slate-600/30 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-slate-200">On-chain</span>
+            <OnChainTicker />
+          </div>
+          {CONTRACTS.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-slate-500">Contracts</span>
+              {CONTRACTS.map((c) => (
+                <div key={c.label} className="group inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-[11px]" title={c.note}>
+                  <svg className="h-3 w-3 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <span className="text-slate-300">{c.label}</span>
+                  <a href={explorerAddress(c.address)} target="_blank" rel="noreferrer" className="font-mono text-slate-400 hover:text-brand">{shortAddr(c.address)}</a>
+                  <button onClick={() => { navigator.clipboard?.writeText(c.address); toast.success(`${c.label} address copied`); }} className="text-slate-500 hover:text-brand" aria-label={`Copy ${c.label} address`}>
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 pt-8 text-sm text-slate-300 sm:flex-row">

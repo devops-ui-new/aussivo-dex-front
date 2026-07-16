@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
 
 import { API } from "../config/api";
+import { createPortal } from "react-dom";
+import { GenerativeArt, shortHash, asHash } from "../components/GenerativeArt";
 
 /** Withdrawal status → friendly label + pill style. */
 const STATUS_META = {
@@ -197,95 +199,6 @@ function computeYield(deposit, now) {
   };
 }
 
-/**
- * One card per vault (display-only grouping). Sums principal across the user's deposits in the
- * same vault, and shows this-cycle accruing + matured-so-far + next maturation. Yield is NO
- * longer withdrawn here — matured yield is withdrawn from the "Matured Yield" balance at the
- * top. Principal redemption stays per-deposit inside Details (redeemable anytime; 1% if < 30d).
- */
-function GroupedPositionCard({ deposits, openRedeem, loading }) {
-  const [now, setNow] = useState(Date.now());
-  const [open, setOpen] = useState(false);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-
-  const first = deposits[0];
-  const asset = first.asset;
-  const vaultId = typeof first.vaultId === "object" ? first.vaultId?._id : first.vaultId;
-  const vaultName = first.vaultId?.name || "Vault";
-  const annualApy = Number(first.poolApy ?? (first.apyPercent || 0)).toFixed(1);
-  const monthlyApy = Number(first.poolApyMonthly ?? ((first.apyPercent || 0) / 12));
-
-  let totalPrincipal = 0, totalLive = 0, totalMatured = 0, perDay = 0, soonestMaturation = Infinity;
-  for (const d of deposits) {
-    const y = computeYield(d, now);
-    totalPrincipal += y.amount;
-    totalLive += y.liveThisCycle; totalMatured += y.maturedSoFar; perDay += y.perDay;
-    if (y.nextMaturationMs) soonestMaturation = Math.min(soonestMaturation, y.nextMaturationMs);
-  }
-  const maturationDate = soonestMaturation !== Infinity ? new Date(soonestMaturation) : null;
-
-  return (
-    <div className="glass p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold font-display ${asset === "USDC" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}>
-            {asset === "USDC" ? "$" : "₮"}
-          </div>
-          <div>
-            {vaultId ? (
-              <Link to={`/pool/${vaultId}`} className="font-semibold hover:text-brand transition-colors">{vaultName} →</Link>
-            ) : (<div className="font-semibold">{vaultName}</div>)}
-            <div className="text-sm text-muted">${totalPrincipal.toLocaleString()} {asset} · {annualApy}% APY ({monthlyApy.toFixed(2)}%/mo)</div>
-            <div className="text-[11px] text-muted mt-0.5">{deposits.length} deposit{deposits.length > 1 ? "s" : ""} in this vault</div>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="space-y-0.5">
-            <div className="text-xs font-mono font-semibold text-yellow-400">+${totalLive.toFixed(6)} <span className="font-sans font-normal text-muted">this cycle</span></div>
-            <div className="text-[11px] text-muted">Matured: <span className="text-emerald-300 font-mono">+${totalMatured.toFixed(6)}</span></div>
-            <div className="text-[11px] text-muted">≈ ${perDay.toFixed(6)}/day</div>
-            <div className="text-[11px] text-emerald-400/80">
-              {maturationDate ? <>Next maturation {maturationDate.toLocaleDateString()}</> : null}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <button onClick={() => setOpen((o) => !o)} className="mt-3 text-[11px] text-brand hover:underline">
-        {open ? "Hide deposits ▲" : `Details · ${deposits.length} deposit${deposits.length > 1 ? "s" : ""} ▾`}
-      </button>
-      {open && (
-        <div className="mt-3 space-y-2 border-t border-surface-4/40 pt-3">
-          {deposits.map((d, i) => {
-            const y = computeYield(d, now);
-            return (
-              <div key={d._id || i} className="flex items-center justify-between gap-3 bg-[#0d1324]/40 rounded-lg px-3 py-2">
-                <div>
-                  <div className="font-mono text-sm text-slate-200">${Number(d.amount || 0).toFixed(2)} {d.asset}</div>
-                  <div className="text-[11px] text-muted">
-                    +${y.liveThisCycle.toFixed(6)} this cycle · matured +${y.maturedSoFar.toFixed(6)}
-                    {y.early && <span className="text-amber-300/90"> · 1% fee if redeemed now</span>}
-                  </div>
-                </div>
-                {d.redemptionPending ? (
-                  <span className="tag tag-yellow text-xs">Redemption Pending</span>
-                ) : (
-                  <button
-                    onClick={() => openRedeem(d)}
-                    disabled={loading === d._id}
-                    className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-3 py-1 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50">
-                    {loading === d._id ? "..." : "Redeem →"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 /**
  * Live, per-second view for one deposit under the 30-day maturation model.
@@ -340,8 +253,8 @@ function AccruingThisCycleCard({ deposits }) {
   for (const d of deposits) { const y = computeYield(d, now); live += y.liveThisCycle; perDay += y.perDay; }
   return (
     <div className="glass p-5">
-      <div className="text-xs text-muted mb-1 uppercase tracking-wider">Accruing This Cycle</div>
-      <div className="text-2xl font-display font-bold text-yellow-400 font-mono">${live.toFixed(6)}</div>
+      <div className="text-sm text-muted mb-1 uppercase tracking-wider">Accruing This Cycle</div>
+      <div className="text-3xl font-display font-bold text-yellow-400 font-mono">${live.toFixed(6)}</div>
       <div className="text-[11px] text-muted mt-1">≈ ${perDay.toFixed(6)}/day · matures every 30 days</div>
     </div>
   );
@@ -428,6 +341,11 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
     <div className="mb-10">
       {/* Wallet-style vault card */}
       <div className="relative overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.10] via-surface-1/70 to-surface-1/70 p-6">
+        {/* generative art wash — matches the position cards' aesthetic */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.16]">
+          <GenerativeArt seed={`matured:${seed}`} className="h-full w-full" animate={false} />
+        </div>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-surface-1/40 via-surface-1/70 to-surface-1/90" />
         <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-brand/10 blur-3xl" />
         <div className="relative">
           <div className="flex items-center gap-2">
@@ -492,6 +410,473 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
   );
 }
 
+// ── Shared 1-second clock: every card subscribes to ONE interval (no timer sprawl). ──
+const __clockSubs = new Set();
+let __clockTimer = null;
+let __clockNow = Date.now();
+function useNow() {
+  const [now, setNow] = useState(__clockNow);
+  useEffect(() => {
+    const fn = (t) => setNow(t);
+    __clockSubs.add(fn);
+    if (!__clockTimer) {
+      __clockTimer = setInterval(() => { __clockNow = Date.now(); __clockSubs.forEach((f) => f(__clockNow)); }, 1000);
+    }
+    return () => {
+      __clockSubs.delete(fn);
+      if (__clockSubs.size === 0 && __clockTimer) { clearInterval(__clockTimer); __clockTimer = null; }
+    };
+  }, []);
+  return now;
+}
+
+
+/**
+ * GroupedPositionCard — ONE card per pool (vault + asset), aggregating all of the user's
+ * deposits in it. Shows totals (principal, accruing, matured), blended APY, deposit count and
+ * lock summary. Click → GroupDetailModal with the full per-deposit breakdown. Scales cleanly
+ * whether the user has 1 or 100 deposits in the pool.
+ */
+function GroupedPositionCard({ deposits, onOpen }) {
+  const now = useNow();
+  const first = deposits[0];
+  const asset = first.asset;
+  const vaultName = first.vaultId?.name || "Vault";
+  const vaultId = typeof first.vaultId === "object" ? first.vaultId?._id : first.vaultId;
+
+  let principal = 0, accruing = 0, matured = 0, perDay = 0, soonest = Infinity, locked = 0, apyW = 0, pending = 0;
+  for (const d of deposits) {
+    const y = computeYield(d, now);
+    principal += y.amount; accruing += y.liveThisCycle; matured += y.maturedSoFar; perDay += y.perDay;
+    apyW += y.amount * Number(d.poolApy ?? d.apyPercent ?? 0);
+    if (y.nextMaturationMs) soonest = Math.min(soonest, y.nextMaturationMs);
+    if (y.locked) locked++;
+    if (d.redemptionPending) pending++;
+  }
+  const blendedApy = principal > 0 ? apyW / principal : Number(first.apyPercent || 0);
+  const nms = soonest !== Infinity ? Math.max(0, soonest - now) : 0;
+  const nd = Math.floor(nms / 86400000), nh = Math.floor((nms % 86400000) / 3600000), nmm = Math.floor((nms % 3600000) / 60000);
+
+  return (
+    <button
+      onClick={() => onOpen(deposits)}
+      className="group text-left glass overflow-hidden rounded-2xl ring-1 ring-brand/15 transition-all duration-300 hover:ring-brand/45 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40"
+    >
+      <div className="relative h-24 overflow-hidden">
+        <GenerativeArt seed={`${vaultId}:${asset}`} glyph={asset === "USDC" ? "$" : "₮"} className="absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-surface-1 via-surface-1/10 to-transparent" />
+        <div className="absolute left-3 top-3 flex items-center gap-1.5">
+          <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[11px] font-bold backdrop-blur ${asset === "USDC" ? "bg-blue-500/25 text-blue-200" : "bg-emerald-500/25 text-emerald-200"}`}>{asset === "USDC" ? "$" : "₮"}</span>
+          <span className="rounded-md bg-black/30 px-1.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur">{deposits.length} deposit{deposits.length > 1 ? "s" : ""}</span>
+        </div>
+        <div className="absolute right-3 top-3">
+          {pending === deposits.length && pending > 0
+            ? <span className="tag tag-yellow text-[10px]">Redeeming</span>
+            : locked > 0
+              ? <span className="tag tag-yellow text-[10px]">{locked} locked</span>
+              : <span className="tag tag-green text-[10px]">Active</span>}
+        </div>
+        <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
+          <div className="font-display text-sm font-bold text-white drop-shadow">{vaultName}</div>
+          <div className="font-mono text-[10px] text-white/70">{blendedApy.toFixed(1)}% APY</div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted">Principal</div>
+            <div className="font-display text-2xl font-bold text-white">${principal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wider text-muted">Accruing</div>
+            <div className="font-mono text-base font-semibold text-yellow-400">+${accruing.toFixed(6)}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-lg bg-white/[0.02] px-2.5 py-1.5">
+            <div className="text-muted">Matured</div>
+            <div className="font-mono text-emerald-300">+${matured.toFixed(4)}</div>
+          </div>
+          <div className="rounded-lg bg-white/[0.02] px-2.5 py-1.5">
+            <div className="text-muted">Next matures</div>
+            <div className="text-emerald-400/80">{soonest !== Infinity ? `${nd}d ${String(nh).padStart(2, "0")}h ${String(nmm).padStart(2, "0")}m` : "—"}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between border-t border-surface-4/40 pt-3">
+          <span className="text-xs text-muted">≈ ${perDay.toFixed(6)}/day</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-sm font-bold text-brand transition-colors group-hover:bg-brand/20">
+            View {deposits.length} deposit{deposits.length > 1 ? "s" : ""}
+            <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/** Per-deposit row inside GroupDetailModal. The WHOLE row is tap-to-open (large target,
+ *  clear chevron + hint); Redeem is a separate, prominent button. Sized for easy reading. */
+function DepositRow({ deposit, loading, onRedeem, onOpenDeposit }) {
+  const now = useNow();
+  const y = computeYield(deposit, now);
+  const asset = deposit.asset;
+  const frac = y.monthlyYield > 0 ? Math.min(1, y.liveThisCycle / y.monthlyYield) : 0;
+  const nms = Math.max(0, y.nextMaturationMs - now);
+  const nd = Math.floor(nms / 86400000), nh = Math.floor((nms % 86400000) / 3600000);
+  const created = deposit.createdAt ? new Date(deposit.createdAt) : null;
+  const open = () => onOpenDeposit(deposit);
+
+  return (
+    <div
+      onClick={open}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
+      className="group cursor-pointer rounded-2xl border border-surface-4/40 bg-[#0d1324]/50 p-4 transition-all hover:border-brand/50 hover:bg-[#0d1324]/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-2xl font-bold text-white">${Number(deposit.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span className="text-base text-slate-400">{asset}</span>
+            {deposit.redemptionPending
+              ? <span className="tag tag-yellow text-xs">Redeeming</span>
+              : y.locked
+                ? <span className="tag tag-yellow text-xs">Locked</span>
+                : <span className="tag tag-green text-xs">Active</span>}
+          </div>
+          <div className="mt-1 text-sm text-slate-400">Deposited {created ? created.toLocaleDateString() : "—"}</div>
+        </div>
+        {/* big, obvious open affordance */}
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand transition-all group-hover:bg-brand/20 group-hover:translate-x-0.5">
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </div>
+      </div>
+
+      {/* progress */}
+      <div className="mt-3">
+        <div className="mb-1.5 flex justify-between text-sm">
+          <span className="text-slate-300">Cycle {(frac * 100).toFixed(0)}%</span>
+          <span className="text-emerald-400">matures in {nd}d {String(nh).padStart(2, "0")}h</span>
+        </div>
+        <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div className="h-full rounded-full bg-gradient-to-r from-brand-dark to-brand" style={{ width: `${frac * 100}%` }} />
+        </div>
+      </div>
+
+      {/* amounts */}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+          <div className="text-xs text-muted">Accruing now</div>
+          <div className="font-mono text-base font-semibold text-yellow-400">+${y.liveThisCycle.toFixed(6)}</div>
+        </div>
+        <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+          <div className="text-xs text-muted">Matured</div>
+          <div className="font-mono text-base font-semibold text-emerald-300">+${y.maturedSoFar.toFixed(4)}</div>
+        </div>
+      </div>
+
+      {/* actions row: clear tap hint + Redeem */}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-1.5 text-base font-semibold text-brand group-hover:underline">
+          Tap to view full details
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+        {!deposit.redemptionPending && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRedeem(deposit); }}
+            disabled={loading === deposit._id}
+            className="rounded-xl border border-brand/30 bg-brand/15 px-5 py-2.5 text-base font-bold text-brand transition-colors hover:bg-brand/25 disabled:opacity-50"
+          >
+            {loading === deposit._id ? "…" : "Redeem"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One row in the block-explorer style event timeline. */
+function TimelineRow({ ev, asset, isLast }) {
+  const meta = {
+    deposit:  { color: "#34d399", bg: "bg-emerald-500/15", ring: "ring-emerald-400/30", icon: "M12 3v18M5 10l7-7 7 7", label: "text-emerald-300" },
+    matured:  { color: "#22d3ee", bg: "bg-cyan-500/15",    ring: "ring-cyan-400/30",    icon: "M20 6L9 17l-5-5",       label: "text-cyan-300" },
+    accruing: { color: "#facc15", bg: "bg-yellow-500/15",  ring: "ring-yellow-400/30",  icon: "M12 8v4l3 2M12 21a9 9 0 100-18 9 9 0 000 18z", label: "text-yellow-300" },
+    redeem:   { color: "#f59e0b", bg: "bg-amber-500/15",   ring: "ring-amber-400/30",   icon: "M12 19V5M5 12l7 7 7-7",  label: "text-amber-300" },
+    withdraw: { color: "#60a5fa", bg: "bg-blue-500/15",     ring: "ring-blue-400/30",    icon: "M12 19V5M5 12l7 7 7-7",  label: "text-blue-300" },
+  }[ev.type] || { color: "#94a3b8", bg: "bg-slate-500/15", ring: "ring-slate-400/30", icon: "M12 8v8", label: "text-slate-300" };
+
+  return (
+    <div className="relative flex gap-3 pb-4">
+      {!isLast && <span className="absolute left-[13px] top-7 h-full w-px bg-surface-4/50" />}
+      <div className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${meta.bg} ring-1 ${meta.ring}`}>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke={meta.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon} /></svg>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`text-sm font-semibold ${meta.label}`}>{ev.title}</span>
+          {ev.amount != null && <span className="font-mono text-sm font-semibold text-slate-100">{ev.sign || ""}${Number(ev.amount).toFixed(ev.precise ? 6 : 2)} {asset}</span>}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
+          <span>{ev.live ? "live · now" : new Date(ev.at).toLocaleString()}</span>
+          {ev.status && <span className={`tag text-[9px] ${STATUS_META[ev.status]?.cls || "tag-yellow"}`}>{STATUS_META[ev.status]?.label || ev.status}</span>}
+          {ev.txHash && (
+            <a href={`https://bscscan.com/tx/${ev.txHash}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
+              {shortHash(ev.txHash, 8, 6)}
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M17 7H8M17 7v9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PositionDetailModal — the "surprise": a block-explorer style view of a single deposit.
+ * A generative-art hero, a copyable position id + on-chain tx link, a full metrics grid, and a
+ * chronological event timeline (deposit → each matured cycle → live cycle → withdrawals) built
+ * from the deposit's own data + related withdrawals. Redeem reuses the existing flow untouched.
+ */
+function PositionDetailModal({ deposit, withdrawals, onRedeem, onClose }) {
+  const now = useNow();
+  if (!deposit) return null;
+  const y = computeYield(deposit, now);
+  const asset = deposit.asset;
+  const vaultName = deposit.vaultId?.name || "Vault";
+  const vaultId = typeof deposit.vaultId === "object" ? deposit.vaultId?._id : deposit.vaultId;
+  const createdMs = deposit.createdAt ? new Date(deposit.createdAt).getTime() : now;
+  const ageDays = Math.floor((now - createdMs) / 86400000);
+  const annualApy = Number(deposit.poolApy ?? deposit.apyPercent ?? 0);
+  const CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
+  const posId = asHash(deposit._id);
+
+  // Build the chronological event feed (newest first).
+  const events = [];
+  // Rejected requests are refunded (nothing happened) → don't clutter the timeline with them.
+  const related = (withdrawals || []).filter((w) => String(w.depositId?._id || w.depositId) === String(deposit._id) && w.status !== "rejected");
+  related.forEach((w) => events.push({
+    type: w.source === "deposit" ? "redeem" : "withdraw",
+    title: w.source === "deposit" ? "Principal redemption" : "Yield withdrawal",
+    amount: w.amount, sign: "−", at: new Date(w.createdAt).getTime(), status: w.status, txHash: w.txHash,
+  }));
+  if (y.liveThisCycle > 0) events.push({ type: "accruing", title: `Cycle ${y.completedCycles + 1} accruing`, amount: y.liveThisCycle, sign: "+", precise: true, live: true, at: now });
+  const shownCycles = Math.min(y.completedCycles, 6);
+  for (let c = y.completedCycles; c > y.completedCycles - shownCycles; c--) {
+    events.push({ type: "matured", title: `Cycle ${c} matured`, amount: y.monthlyYield, sign: "+", precise: true, at: createdMs + c * CYCLE_MS });
+  }
+  events.push({ type: "deposit", title: "Deposit confirmed", amount: deposit.amount, at: createdMs, txHash: deposit.txHash });
+  events.sort((a, b) => b.at - a.at);
+  const earlierCycles = y.completedCycles - shownCycles;
+
+  const copy = (v, label) => { navigator.clipboard?.writeText(v); toast.success(`${label} copied`); };
+  const Metric = ({ label, value, sub, accent = "text-slate-100" }) => (
+    <div className="rounded-xl border border-surface-4/40 bg-[#0d1324]/60 p-3.5">
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
+      <div className={`mt-1 font-mono text-lg font-bold ${accent}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[195] flex items-center justify-center bg-black/70 backdrop-blur-md px-4 py-8" style={{ animation: "wpmFade .2s ease" }} onClick={onClose}>
+      <div className="glass relative w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-2xl ring-1 ring-white/[0.06] flex flex-col" style={{ animation: "wpmPop .25s ease" }} onClick={(e) => e.stopPropagation()}>
+        {/* hero */}
+        <div className="relative h-36 shrink-0">
+          <GenerativeArt seed={deposit._id || `${vaultName}:${asset}`} glyph={asset === "USDC" ? "$" : "₮"} className="absolute inset-0 h-full w-full" />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface-1 via-surface-1/40 to-transparent" />
+          <button onClick={onClose} className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur hover:bg-black/60 hover:text-white">✕</button>
+          <button
+            onClick={() => {
+              const txt = `I'm earning ${annualApy.toFixed(1)}% APY on my ${vaultName} position with @aussivo — non-custodial, on-chain yield. 🌿`;
+              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin + "/pools" : "")}`, "_blank", "noopener");
+            }}
+            className="absolute right-12 top-3 flex h-8 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[11px] font-semibold text-white/80 backdrop-blur hover:bg-black/60 hover:text-white"
+            title="Share on X"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 1.2h3.7l-8 9.1 9.4 12.5h-7.4l-5.8-7.6-6.6 7.6H.5l8.5-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.5h2L6.5 3.3H4.3l13.3 17.4z"/></svg>
+            Share
+          </button>
+          <div className="absolute bottom-3 left-5 right-5">
+            <div className="flex items-center gap-2">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${asset === "USDC" ? "bg-blue-500/25 text-blue-200" : "bg-emerald-500/25 text-emerald-200"}`}>{asset === "USDC" ? "$" : "₮"}</span>
+              <div className="font-display text-lg font-bold text-white drop-shadow">{vaultName}</div>
+              {vaultId && <Link to={`/pool/${vaultId}`} className="text-[11px] text-brand hover:underline">open vault →</Link>}
+            </div>
+            <div className="mt-0.5 font-display text-2xl font-bold text-white">${Number(deposit.amount || 0).toLocaleString()} <span className="text-sm font-normal text-white/70">{asset} · {annualApy.toFixed(1)}% APY</span></div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {/* position id / on-chain */}
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-surface-4/40 bg-[#0d1324]/60 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Position ID</span>
+            <span className="font-mono text-xs text-slate-200">{shortHash(posId, 10, 8)}</span>
+            <button onClick={() => copy(posId, "Position ID")} className="text-brand hover:underline text-[11px]">copy</button>
+            {deposit.txHash && (
+              <a href={`https://bscscan.com/tx/${deposit.txHash}`} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline">
+                On-chain tx
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M17 7H8M17 7v9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </a>
+            )}
+          </div>
+
+          {/* metrics */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Metric label="Deposited" value={new Date(createdMs).toLocaleDateString()} sub={`${ageDays} day${ageDays === 1 ? "" : "s"} ago`} />
+            <Metric label="Accruing this cycle" value={`$${y.liveThisCycle.toFixed(6)}`} accent="text-yellow-400" sub={`≈ $${y.perDay.toFixed(6)}/day`} />
+            <Metric label="Matured (withdrawable)" value={`$${y.maturedSoFar.toFixed(6)}`} accent="text-emerald-300" sub="in Matured Yield" />
+            <Metric label="Monthly yield" value={`$${y.monthlyYield.toFixed(4)}`} sub={`${(annualApy / 12).toFixed(2)}%/mo`} />
+            <Metric label="Cycles matured" value={String(y.completedCycles)} sub="30-day cycles" />
+            <Metric label={y.locked ? "Locked until" : "Lock"} value={y.locked ? new Date(y.unlockMs).toLocaleDateString() : "Unlocked"} accent={y.locked ? "text-yellow-400" : "text-emerald-300"} />
+          </div>
+
+          {y.early && (
+            <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-[11px] text-amber-200/90">
+              Within the first 30 days: redeeming principal now costs a 1% early-exit fee and forfeits this cycle's un-matured yield. Already-matured yield is unaffected.
+            </div>
+          )}
+
+          {/* timeline */}
+          <div className="mt-5">
+            <div className="mb-3 flex items-center gap-2">
+              <h4 className="font-display text-sm font-bold text-white">Activity</h4>
+              <span className="text-[10px] text-muted">on-chain &amp; yield events</span>
+            </div>
+            {events.map((ev, i) => <TimelineRow key={i} ev={ev} asset={asset} isLast={i === events.length - 1 && earlierCycles <= 0} />)}
+            {earlierCycles > 0 && (
+              <div className="relative flex gap-3 pl-[2px] text-[11px] text-muted">
+                <span className="ml-[11px]">＋ {earlierCycles} earlier matured cycle{earlierCycles === 1 ? "" : "s"} (+${(earlierCycles * y.monthlyYield).toFixed(2)} {asset})</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* actions */}
+        <div className="shrink-0 border-t border-surface-4/40 p-4">
+          {deposit.redemptionPending ? (
+            <div className="rounded-xl bg-yellow-500/[0.08] border border-yellow-500/20 py-3 text-center text-sm font-semibold text-yellow-300">Redemption in progress · typically 4–24 hours</div>
+          ) : (
+            <button onClick={() => onRedeem(deposit)} className="w-full rounded-xl bg-gradient-to-r from-brand-dark to-brand py-3 font-display font-bold text-white transition-all hover:shadow-lg hover:shadow-brand/20">
+              Redeem principal &amp; exit
+              <span className="block text-[11px] font-normal text-white/80">Matured yield stays in your Matured Yield balance</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * GroupDetailModal — the drill-down for one pool: an aggregate hero + a sortable, scrollable
+ * list of every underlying deposit (each redeemable / openable). Reads deposits live from the
+ * parent so it stays current across refreshes. Handles 1 or 100 deposits gracefully.
+ */
+function GroupDetailModal({ deposits, loading, onRedeem, onRedeemAll, onOpenDeposit, onClose }) {
+  const now = useNow();
+  const [sort, setSort] = useState("newest");
+  if (!deposits || deposits.length === 0) return null;
+
+  const first = deposits[0];
+  const asset = first.asset;
+  const vaultName = first.vaultId?.name || "Vault";
+  const vaultId = typeof first.vaultId === "object" ? first.vaultId?._id : first.vaultId;
+
+  let principal = 0, accruing = 0, matured = 0, perDay = 0, soonest = Infinity, locked = 0, apyW = 0;
+  const redeemable = [];
+  for (const d of deposits) {
+    const y = computeYield(d, now);
+    principal += y.amount; accruing += y.liveThisCycle; matured += y.maturedSoFar; perDay += y.perDay;
+    apyW += y.amount * Number(d.poolApy ?? d.apyPercent ?? 0);
+    if (y.nextMaturationMs) soonest = Math.min(soonest, y.nextMaturationMs);
+    if (y.locked) locked++;
+    if (!d.redemptionPending) redeemable.push(d._id);
+  }
+  const blendedApy = principal > 0 ? apyW / principal : Number(first.apyPercent || 0);
+  const nms = soonest !== Infinity ? Math.max(0, soonest - now) : 0;
+  const nd = Math.floor(nms / 86400000), nh = Math.floor((nms % 86400000) / 3600000);
+
+  const sorted = [...deposits].sort((a, b) => {
+    if (sort === "largest") return Number(b.amount) - Number(a.amount);
+    if (sort === "oldest") return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0); // newest
+  });
+
+  const Metric = ({ label, value, sub, accent = "text-slate-100" }) => (
+    <div className="rounded-xl border border-surface-4/40 bg-[#0d1324]/60 p-3.5">
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
+      <div className={`mt-1 font-mono text-lg font-bold ${accent}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[190] flex items-center justify-center bg-black/70 backdrop-blur-md px-4 py-8" style={{ animation: "wpmFade .2s ease" }} onClick={onClose}>
+      <div className="glass relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl ring-1 ring-white/[0.06]" style={{ animation: "wpmPop .25s ease" }} onClick={(e) => e.stopPropagation()}>
+        {/* hero */}
+        <div className="relative h-32 shrink-0">
+          <GenerativeArt seed={`${vaultId}:${asset}`} glyph={asset === "USDC" ? "$" : "₮"} className="absolute inset-0 h-full w-full" />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface-1 via-surface-1/40 to-transparent" />
+          <button onClick={onClose} className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur hover:bg-black/60 hover:text-white">✕</button>
+          <div className="absolute bottom-3 left-5 right-5">
+            <div className="flex items-center gap-2">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${asset === "USDC" ? "bg-blue-500/25 text-blue-200" : "bg-emerald-500/25 text-emerald-200"}`}>{asset === "USDC" ? "$" : "₮"}</span>
+              <div className="font-display text-lg font-bold text-white drop-shadow">{vaultName}</div>
+              {vaultId && <Link to={`/pool/${vaultId}`} className="text-[11px] text-brand hover:underline">open vault →</Link>}
+            </div>
+            <div className="mt-0.5 font-display text-2xl font-bold text-white">${principal.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-sm font-normal text-white/70">{asset} · {blendedApy.toFixed(1)}% APY · {deposits.length} deposit{deposits.length > 1 ? "s" : ""}</span></div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {/* aggregate metrics */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Metric label="Total principal" value={`$${principal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
+            <Metric label="Matured (withdrawable)" value={`$${matured.toFixed(6)}`} accent="text-emerald-300" sub="in Matured Yield" />
+            <Metric label="Accruing this cycle" value={`$${accruing.toFixed(6)}`} accent="text-yellow-400" sub={`≈ $${perDay.toFixed(6)}/day`} />
+            <Metric label="Deposits" value={String(deposits.length)} sub={locked > 0 ? `${locked} locked` : "all unlocked"} />
+            <Metric label="Soonest maturation" value={soonest !== Infinity ? `${nd}d ${String(nh).padStart(2, "0")}h` : "—"} />
+            <Metric label="Blended APY" value={`${blendedApy.toFixed(2)}%`} sub={`${(blendedApy / 12).toFixed(2)}%/mo`} />
+          </div>
+
+          {/* controls */}
+          <div className="mt-5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-200">Deposits</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg border border-surface-4/50 bg-[#0d1324] px-3 py-1.5 text-sm text-slate-200 outline-none">
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="largest">Largest</option>
+              </select>
+            </div>
+            {redeemable.length > 0 && (
+              <button onClick={() => onRedeemAll(redeemable)}
+                className="rounded-xl border border-brand/30 bg-brand/15 px-4 py-2 text-sm font-bold text-brand hover:bg-brand/25">
+                Redeem all ({redeemable.length}) →
+              </button>
+            )}
+          </div>
+
+          <p className="mt-3 rounded-xl border border-brand/15 bg-brand/[0.06] px-4 py-2.5 text-sm text-slate-300">
+            👉 Tap any deposit below to open its full history and details.
+          </p>
+
+          {/* per-deposit list */}
+          <div className="mt-3 space-y-3">
+            {sorted.map((d, i) => (
+              <DepositRow key={d._id || i} deposit={d} loading={loading} onRedeem={onRedeem} onOpenDeposit={onOpenDeposit} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();
   const [deposits, setDeposits] = useState([]);
@@ -499,6 +884,8 @@ export default function Portfolio() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [processingModal, setProcessingModal] = useState(null); // { amount, asset, kind }
   const [redeemModal, setRedeemModal] = useState(null); // the deposit the user is choosing to redeem
+  const [detailDeposit, setDetailDeposit] = useState(null); // deposit shown in the block-explorer detail modal
+  const [detailGroupKey, setDetailGroupKey] = useState(null); // pool (vault+asset) shown in the grouped breakdown modal
   const [loading, setLoading] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [tab, setTab] = useState("overview"); // overview | yield | history
@@ -613,26 +1000,32 @@ export default function Portfolio() {
   // time). We only hide deposits that already have a redemption in flight.
   const redeemableDeposits = activeDeposits.filter((d) => !d.redemptionPending);
 
-  // One position per vault+asset (display-only grouping; underlying deposits stay separate).
+  // Group deposits by pool (vault + asset) so the grid shows ONE card per pool regardless of
+  // how many deposits it holds. The drill-down modal reads the group live via this same key.
+  const groupKeyOf = (d) => `${typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId}:${d.asset}`;
   const positionGroups = Object.values(
     activeDeposits.reduce((acc, d) => {
-      const vId = typeof d.vaultId === "object" ? d.vaultId?._id : d.vaultId;
-      const key = `${vId}:${d.asset}`;
-      (acc[key] = acc[key] || []).push(d);
+      const k = groupKeyOf(d);
+      (acc[k] = acc[k] || { key: k, deposits: [] }).deposits.push(d);
       return acc;
     }, {})
-  );
+  ).sort((a, b) => {
+    // biggest pool first (by total principal)
+    const sum = (g) => g.deposits.reduce((s, x) => s + Number(x.amount || 0), 0);
+    return sum(b) - sum(a);
+  });
+  const detailGroupDeposits = detailGroupKey ? activeDeposits.filter((d) => groupKeyOf(d) === detailGroupKey) : [];
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <h1 className="font-display font-bold text-3xl mb-2">Portfolio</h1>
-      <p className="text-muted mb-6">Your deposits, yield earnings, and balances</p>
+    <div className="max-w-5xl mx-auto px-6 py-12 text-[15px]">
+      <h1 className="font-display font-bold text-4xl mb-2">Portfolio</h1>
+      <p className="text-muted text-lg mb-6">Your deposits, yield earnings, and balances</p>
 
       {/* Tabs */}
       <div className="flex gap-1 mb-8 border-b border-surface-4/40">
         {[["overview", "Overview"], ["yield", "Matured Yield"], ["history", "History"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`relative px-4 py-2.5 text-sm font-display font-semibold transition-colors ${tab === k ? "text-white" : "text-muted hover:text-slate-300"}`}>
+            className={`relative px-5 py-3 text-base font-display font-semibold transition-colors ${tab === k ? "text-white" : "text-muted hover:text-slate-300"}`}>
             {label}
             {tab === k && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
           </button>
@@ -642,33 +1035,68 @@ export default function Portfolio() {
       {tab === "overview" && (<>
       {/* Balance Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Total Deposited</div>
-          <div className="text-2xl font-display font-bold">${totalStaked.toLocaleString()}</div>
-        </div>
-        <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Matured Yield</div>
-          <div className="text-2xl font-display font-bold text-brand">
-            ${formatYieldBalanceUsd(user?.yieldWalletUSDT)}
+        <div className="group relative overflow-hidden glass p-5 transition-all hover:-translate-y-0.5 hover:ring-1 hover:ring-white/10">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl" />
+          <div className="relative flex items-center gap-2 text-sm text-muted mb-2 uppercase tracking-wider">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18v12H3z" strokeLinejoin="round"/><path d="M16 12h3M3 7l3-3h12l3 3" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+            Total Deposited
           </div>
-          <div className="text-[11px] text-muted mt-0.5">Withdrawable</div>
+          <div className="relative text-3xl font-display font-bold">${totalStaked.toLocaleString()}</div>
+        </div>
+        <div className="group relative overflow-hidden glass p-5 transition-all hover:-translate-y-0.5 hover:ring-1 hover:ring-brand/20">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brand/10 blur-2xl" />
+          <div className="relative flex items-center gap-2 text-sm text-muted mb-2 uppercase tracking-wider">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand/15 text-brand"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+            Matured Yield
+          </div>
+          <div className="relative text-3xl font-display font-bold text-brand">${formatYieldBalanceUsd(user?.yieldWalletUSDT)}</div>
+          <div className="relative text-[11px] text-muted mt-0.5">Withdrawable</div>
           {((user?.yieldWalletUSDT || 0) + (user?.yieldWalletUSDC || 0)) > 0 && (
-            <button onClick={() => setTab("yield")} className="text-xs text-brand mt-2 hover:underline block">Withdraw in Matured Yield →</button>
+            <button onClick={() => setTab("yield")} className="relative text-xs text-brand mt-2 hover:underline block">Withdraw in Matured Yield →</button>
           )}
         </div>
         <AccruingThisCycleCard deposits={activeDeposits} />
-        <div className="glass p-5">
-          <div className="text-xs text-muted mb-1 uppercase tracking-wider">Referral Earnings</div>
-          <div className="text-2xl font-display font-bold text-blue-400">${(user?.referralEarnings || 0).toFixed(2)}</div>
+        <div className="group relative overflow-hidden glass p-5 transition-all hover:-translate-y-0.5 hover:ring-1 hover:ring-blue-400/20">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
+          <div className="relative flex items-center gap-2 text-sm text-muted mb-2 uppercase tracking-wider">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+            Referral Earnings
+          </div>
+          <div className="relative text-3xl font-display font-bold text-blue-400">${(user?.referralEarnings || 0).toFixed(2)}</div>
           {(user?.referralEarnings || 0) > 0 && (
             <button onClick={() => handleWithdraw(user.referralEarnings, "USDT", "referral")}
-              className="text-xs text-blue-400 mt-2 hover:underline">Withdraw →</button>
+              className="relative text-xs text-blue-400 mt-2 hover:underline">Withdraw →</button>
           )}
         </div>
       </div>
 
+      {/* Active Positions — one card per pool */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-semibold text-2xl">Active Positions <span className="text-muted text-lg font-normal">({positionGroups.length} pool{positionGroups.length === 1 ? "" : "s"} · {activeDeposits.length} deposit{activeDeposits.length === 1 ? "" : "s"})</span></h2>
+        {redeemableDeposits.length > 0 && (
+          <button
+            onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
+            disabled={bulkLoading}
+            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50"
+          >
+            {bulkLoading ? "Redeeming..." : "Redeem all →"}
+          </button>
+        )}
+      </div>
+      {activeDeposits.length === 0 ? (
+        <div className="glass p-10 text-center">
+          <p className="text-muted mb-4">No active deposits yet.</p>
+          <Link to="/pools" className="btn-primary inline-block">Explore Vaults</Link>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-10">
+          {positionGroups.map((g) => (
+            <GroupedPositionCard key={g.key} deposits={g.deposits} onOpen={() => setDetailGroupKey(g.key)} />
+          ))}
+        </div>
+      )}
       {/* How yield works — 30-day maturation explainer */}
-      <div className="mb-8 rounded-xl border border-surface-4/40 bg-[#0d1324]/40 px-4 py-3 text-[11px] text-muted">
+      <div className="mb-8 rounded-xl border border-surface-4/40 bg-[#0d1324]/40 px-4 py-4 text-sm text-muted">
         Yield accrues each 30-day cycle. When a cycle completes it <span className="text-emerald-300">matures</span> into your withdrawable <span className="text-brand">Matured Yield</span> balance and the live counter resets to 0 for the next cycle. Principal can be redeemed anytime — within the first 30 days a <span className="text-amber-300">1% fee</span> applies and that cycle's un-matured yield is forfeited.
       </div>
 
@@ -721,36 +1149,6 @@ export default function Portfolio() {
         );
       })()}
 
-      {/* Active Deposits */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-semibold text-xl">Active Positions ({positionGroups.length})</h2>
-        {redeemableDeposits.length > 0 && (
-          <button
-            onClick={() => handleRedeemAll(redeemableDeposits.map((d) => d._id))}
-            disabled={bulkLoading}
-            className="bg-brand/10 text-brand border border-brand/20 rounded-lg px-4 py-1.5 text-xs font-semibold hover:bg-brand/20 disabled:opacity-50"
-          >
-            {bulkLoading ? "Redeeming..." : "Redeem all →"}
-          </button>
-        )}
-      </div>
-      {activeDeposits.length === 0 ? (
-        <div className="glass p-10 text-center">
-          <p className="text-muted mb-4">No active deposits yet.</p>
-          <Link to="/pools" className="btn-primary inline-block">Explore Vaults</Link>
-        </div>
-      ) : (
-        <div className="space-y-3 mb-10">
-          {positionGroups.map((grp, i) => (
-            <GroupedPositionCard
-              key={i}
-              deposits={grp}
-              openRedeem={openRedeem}
-              loading={loading}
-            />
-          ))}
-        </div>
-      )}
       </>)}
 
       {tab === "yield" && (
@@ -831,15 +1229,36 @@ export default function Portfolio() {
       )}
       </>)}
 
-      {redeemModal && (
+      {detailGroupKey && detailGroupDeposits.length > 0 && createPortal(
+        <>
+          <style>{`@keyframes wpmFade{from{opacity:0}to{opacity:1}}@keyframes wpmPop{0%{transform:scale(.94);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
+          <GroupDetailModal
+            deposits={detailGroupDeposits}
+            loading={loading}
+            onRedeem={(d) => openRedeem(d)}
+            onRedeemAll={(ids) => handleRedeemAll(ids)}
+            onOpenDeposit={(d) => setDetailDeposit(d)}
+            onClose={() => setDetailGroupKey(null)}
+          />
+        </>, document.body)}
+      {detailDeposit && createPortal(
+        <>
+          <style>{`@keyframes wpmFade{from{opacity:0}to{opacity:1}}@keyframes wpmPop{0%{transform:scale(.94);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
+          <PositionDetailModal
+            deposit={detailDeposit}
+            withdrawals={withdrawals}
+            onRedeem={(d) => { setDetailDeposit(null); openRedeem(d); }}
+            onClose={() => setDetailDeposit(null)}
+          />
+        </>, document.body)}
+      {redeemModal && createPortal(
         <RedeemChoiceModal
           deposit={redeemModal}
           busy={loading === redeemModal._id}
           onRedeem={() => redeemPrincipal(redeemModal)}
           onClose={() => setRedeemModal(null)}
-        />
-      )}
-      {processingModal && <WithdrawProcessingModal info={processingModal} onClose={() => setProcessingModal(null)} />}
+        />, document.body)}
+      {processingModal && createPortal(<WithdrawProcessingModal info={processingModal} onClose={() => setProcessingModal(null)} />, document.body)}
     </div>
   );
 }

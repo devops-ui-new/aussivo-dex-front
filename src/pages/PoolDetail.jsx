@@ -7,6 +7,8 @@ import toast from "react-hot-toast";
 import { transferEphemeralFromInjected } from "../utils/transferEphemeralFromInjected";
 import { sampleSeries } from "../utils/sampleSeries";
 import { usePolledAllocation } from "../hooks/usePolledAllocation";
+import { GenerativeArt } from "../components/GenerativeArt";
+import Avatar from "../components/Avatar";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
 // The allocation is computed on the BACKEND (helpers/allocationModel.ts). The frontend
@@ -390,28 +392,60 @@ export default function PoolDetail() {
         <span className="text-slate-200">{pool.name}</span>
       </div>
 
-      {/* ═══ HEADER ═══ */}
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <h1 className="font-display font-bold text-2xl text-white mb-2">{pool.name}</h1>
-          <div className="flex items-center gap-4 text-sm text-slate-400">
-            <div className="flex items-center gap-1.5">
-              {strategies.slice(0, 3).map((s, i) => (
-                <div key={i} className="w-6 h-6 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ background: s.color, marginLeft: i > 0 ? "-6px" : 0, zIndex: 3 - i, border: "2px solid white" }}>
-                  {s.name.slice(0, 2)}
+      {/* ═══ HERO ═══ */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] mb-6">
+        <div className="absolute inset-0">
+          <GenerativeArt seed={pool.id || pool.name} glyph={pool.assetSymbol === "USDC" ? "$" : "₮"} className="h-full w-full" />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-surface-1 via-surface-1/85 to-surface-1/45" />
+        <div className="relative p-6 sm:p-7">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-4">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-lg shadow-black/40 bg-surface-4">
+                <Avatar seed={pool.id || pool.name} style="rings" size={56} radius={16} className="h-full w-full" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="font-display font-bold text-2xl sm:text-3xl text-white">{pool.name}</h1>
+                  <span className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-300">{pool.assetSymbol}</span>
+                  <span className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium ${pool.lockDays > 0 ? "border-amber-500/40 bg-amber-500/10 text-amber-300" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"}`}>{lockLabel}</span>
                 </div>
-              ))}
-              {strategies.length > 3 && <span className="text-xs text-slate-500 ml-1">+{strategies.length - 3}</span>}
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="font-display font-bold text-2xl text-emerald-400">▲ {apy}%</span>
+                  <span className="text-sm font-semibold text-slate-300">APY</span>
+                  <span className="text-sm text-slate-400">· {monthly}% / mo</span>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex items-center">
+                    {strategies.slice(0, 4).map((s, i) => (
+                      <div key={i} className="h-7 w-7 rounded-full text-[8px] font-bold text-white flex items-center justify-center ring-2 ring-surface-1" style={{ background: s.color, marginLeft: i > 0 ? "-8px" : 0, zIndex: 5 - i }}>
+                        {s.code || s.name.slice(0, 2)}
+                      </div>
+                    ))}
+                    {strategies.length > 4 && <span className="ml-1 text-xs text-slate-500">+{strategies.length - 4}</span>}
+                  </div>
+                  <span className="text-xs text-slate-400">{pool.investorsLabel || `${(Number(pool.totalUsers || 0) + Number(pool.baseline_users ?? 0)).toLocaleString()}+`} investors</span>
+                </div>
+              </div>
             </div>
-            <span>👥 {pool.investorsLabel || `${(Number(pool.totalUsers || 0) + Number(pool.baseline_users ?? 0)).toLocaleString()}+`} investors</span>
-            <span>Market Cap: ${capNum > 1000 ? `${(capNum / 1000).toFixed(0)}M` : `${capNum.toFixed(0)}K`} ({((tvlNum / capNum) * 100).toFixed(2)}%)</span>
+            <button className="text-sm text-slate-300 border border-surface-4/60 rounded-lg px-4 py-2 hover:bg-[#0d1324] hover:border-brand/40 transition-colors backdrop-blur">☆ Watchlist</button>
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className={`font-display font-bold text-lg ${parseFloat(apy) > 0 ? "text-emerald-500" : "text-red-500"}`}>▲ {apy}% APY</span>
-            <span className="text-sm text-slate-400">({monthly}% / month)</span>
+
+          {/* key stats */}
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "TVL", value: `$${tvlNum >= 1 ? `${tvlNum.toFixed(2)}M` : `${(tvlNum * 1000).toFixed(0)}K`}`, accent: "text-white" },
+              { label: "Capacity filled", value: capNum > 0 ? `${((tvlNum / capNum) * 100).toFixed(1)}%` : "—", accent: "text-brand" },
+              { label: "Monthly yield", value: `${monthly}%`, accent: "text-emerald-300" },
+              { label: "Lock period", value: lockLabel, accent: "text-white" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5 backdrop-blur">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">{s.label}</div>
+                <div className={`mt-0.5 font-display text-lg font-bold ${s.accent}`}>{s.value}</div>
+              </div>
+            ))}
           </div>
         </div>
-        <button className="text-sm text-slate-300 border border-surface-4/60 rounded-lg px-4 py-2 hover:bg-[#0d1324]">☆ Watchlist</button>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mt-6">
@@ -438,7 +472,8 @@ export default function PoolDetail() {
           <div className="glass p-6">
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
+                <h3 className="font-display font-semibold text-slate-100 text-lg">Illustrative Target Allocation</h3>
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300/90 border border-amber-400/30 bg-amber-400/[0.06] rounded-full px-2 py-0.5">Illustrative</span>
                 {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -446,10 +481,13 @@ export default function PoolDetail() {
                         doesn't clash with the monthly-rebalance card below. */}
                     {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
                       ? <>Live model · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
-                      : <>Live</>}
+                      : <>Live model</>}
                   </span>
                 )}
               </div>
+              <p className="text-xs text-muted mt-1 max-w-xl">
+                A model of how this strategy is designed to allocate. These are target weights, not a live on-chain position report, and do not represent funds currently deployed to the named protocols.
+              </p>
             </div>
             <div className="grid md:grid-cols-5 gap-6">
               {/* Donut */}
@@ -498,6 +536,9 @@ export default function PoolDetail() {
                     ))}
                   </tbody>
                 </table>
+                <p className="text-[11px] text-slate-500 mt-4 pt-3 border-t border-surface-4/30">
+                  Target model only. Protocol names indicate the strategy's intended venues and are not a statement that capital is presently allocated to them.
+                </p>
               </div>
             </div>
           </div>
@@ -561,7 +602,7 @@ export default function PoolDetail() {
                 ["Reserve Ratio", pool.reserveRatioLabel || "20-30%"],
                 ["Circuit Breaker", pool.circuitBreakerLabel || "Active ✓"],
               ].map(([k, v], i) => (
-                <div key={i} className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-3">
+                <div key={i} className="bg-[#0d1324] border border-surface-4/50 rounded-xl p-3 transition-colors hover:border-brand/30">
                   <div className="text-xs text-slate-500 mb-1">{k}</div>
                   <div className="text-sm font-semibold text-slate-200">{v}</div>
                 </div>
