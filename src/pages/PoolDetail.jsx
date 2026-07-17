@@ -468,10 +468,9 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
-            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
           </div>
 
-          {/* Constituents — illustrative target allocation (not live positions) */}
+          {/* Constituents */}
           <div className="glass p-6">
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
@@ -480,8 +479,6 @@ export default function PoolDetail() {
                 {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {/* Show the countdown only for a short (demo) rebalance period so it
-                        doesn't clash with the monthly-rebalance card below. */}
                     {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
                       ? <>Live · rebalance in {formatCountdown(polled.msToNextRebalance)}</>
                       : <>Live </>}
