@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import UserDetailModal from "../../components/admin/UserDetailModal";
 import toast from "react-hot-toast";
 
 import { API } from "../../config/api";
@@ -21,6 +22,7 @@ export default function AdminDeposits() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(null);
+  const [openUserId, setOpenUserId] = useState(null);
 
   const load = () => {
     const q = new URLSearchParams({ page, limit: 20, ...(filter && { status: filter }) });
@@ -80,7 +82,12 @@ export default function AdminDeposits() {
               const origin = originOf(d);
               return (
                 <tr key={d._id} className={`border-b border-surface-4/20 ${d.manual ? "bg-yellow-500/[0.04]" : ""}`}>
-                  <td className="p-3"><div className="text-xs">{d.userId?.email || "—"}</div><div className="text-[10px] text-muted font-mono">{d.walletAddress?.slice(0, 10)}...</div></td>
+                  <td className="p-3">
+                    <button onClick={() => d.userId?._id && setOpenUserId(d.userId._id)} className="text-left group" disabled={!d.userId?._id}>
+                      <div className="text-xs text-slate-200 group-hover:text-brand group-hover:underline">{d.userId?.email || "—"}</div>
+                      <div className="text-[10px] text-muted font-mono">{d.walletAddress?.slice(0, 10)}...</div>
+                    </button>
+                  </td>
                   <td className="p-3">{d.vaultId?.name || "—"} <span className="text-xs text-muted">{d.asset}</span></td>
                   <td className="p-3 text-right font-semibold">${d.amount?.toLocaleString()}</td>
                   <td className="p-3 text-right text-brand">{d.apyPercent}%</td>
@@ -109,6 +116,7 @@ export default function AdminDeposits() {
           </div>
         </div>
       </div>
+      {openUserId && <UserDetailModal userId={openUserId} onClose={() => setOpenUserId(null)} />}
     </AdminLayout>
   );
 }
