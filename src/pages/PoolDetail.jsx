@@ -10,6 +10,7 @@ import { usePolledAllocation } from "../hooks/usePolledAllocation";
 import { GenerativeArt } from "../components/GenerativeArt";
 import Avatar from "../components/Avatar";
 import { ProtocolChip, PoweredBy } from "../components/ProtocolIcons";
+import { KrystalVerichainsStrip } from "../components/SecurityInfra";
 import { DEPOSIT_STAY_WARNING, DEPOSIT_SINGLE_TX_HINT } from "../constants/depositModalCopy";
 
 // The allocation is computed on the BACKEND (helpers/allocationModel.ts). The frontend
@@ -468,6 +469,7 @@ export default function PoolDetail() {
               </div>
             </div>
             <MiniChart seed={pool.id} apy={apy} timeframe={timeframe} />
+            <p className="mt-2 text-[11px] text-slate-500">Illustrative performance — sample data for visualization.</p>
           </div>
 
           {/* Constituents */}
@@ -475,7 +477,7 @@ export default function PoolDetail() {
             <div className="mb-6">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-display font-semibold text-slate-100 text-lg">Constituents</h3>
-                 {allocLive && (
+                {allocLive && (
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-300/90 border border-emerald-400/25 bg-emerald-400/[0.06] rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     {polled.meta?.rebalancePeriodMs && polled.meta.rebalancePeriodMs < 12 * 60 * 60 * 1000
@@ -541,6 +543,7 @@ export default function PoolDetail() {
               <p className="text-sm text-slate-400 leading-relaxed mb-4">
                 The strategies in this vault are reviewed and rebalanced at regular intervals to maximize risk-adjusted returns.
               </p>
+              <KrystalVerichainsStrip className="mb-4" />
               <div className="flex gap-6 bg-[#0d1324] border border-surface-4/50 rounded-xl p-4">
                 {(() => { const rb = monthEndRebalanceDates(); return (<>
                 <div className="text-center">

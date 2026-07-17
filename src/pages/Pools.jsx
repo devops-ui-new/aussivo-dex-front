@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import PoolCard from "../components/PoolCard";
 import ActivityFeed from "../components/ActivityFeed";
 import { PoweredBy } from "../components/ProtocolIcons";
+import SecurityInfra from "../components/SecurityInfra";
 
 export default function Pools() {
   // API imported from config
@@ -160,6 +161,8 @@ export default function Pools() {
       <div className="mt-8">
         <ActivityFeed limit={8} />
       </div>
+
+      <SecurityInfra className="mt-10" />
     </div>
   );
 }

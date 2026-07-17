@@ -1,6 +1,7 @@
 import brandLogo from "../assets/branding/logo-aussivo.png";
 import toast from "react-hot-toast";
 import OnChainTicker from "./OnChainTicker";
+import { KrystalVerichainsStrip } from "./SecurityInfra";
 import { CONTRACTS, explorerAddress, shortAddr } from "../config/chain";
 import {
   IconDiscord,
@@ -129,9 +130,10 @@ export default function Footer() {
 
         {/* On-chain: live network status + verifiable deployed contracts */}
         <div className="flex flex-col gap-4 border-b border-slate-600/30 py-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-semibold text-slate-200">On-chain</span>
             <OnChainTicker />
+            <KrystalVerichainsStrip />
           </div>
           {CONTRACTS.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
