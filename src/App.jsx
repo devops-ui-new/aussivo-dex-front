@@ -17,6 +17,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminDeposits from "./pages/admin/AdminDeposits";
 import AdminChainHealth from "./pages/admin/AdminChainHealth";
 import AdminSweepHealth from "./pages/admin/AdminSweepHealth";
+import AdminDepositAddresses from "./pages/admin/AdminDepositAddresses";
 import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminYieldLogs from "./pages/admin/AdminYieldLogs";
 import AdminReferrals from "./pages/admin/AdminReferrals";
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/deposits" element={<AdminDeposits />} />
           <Route path="/admin/sweep-health" element={<AdminSweepHealth />} />
+          <Route path="/admin/deposit-addresses" element={<AdminDepositAddresses />} />
           <Route path="/admin/chain-health" element={<AdminChainHealth />} />
           <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
           <Route path="/admin/yield-logs" element={<AdminYieldLogs />} />

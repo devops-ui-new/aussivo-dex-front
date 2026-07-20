@@ -3,157 +3,288 @@ import AdminLayout from "../../components/admin/AdminLayout";
 import toast from "react-hot-toast";
 import { API } from "../../config/api";
 
-const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
+const hdr = () => ({
+  Authorization: `Bearer ${localStorage.getItem("admin_token")}`,
+  "Content-Type": "application/json",
+});
 
-function Dot({ ok }) {
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${ok ? "bg-emerald-400" : "bg-red-400"} ${ok ? "" : "animate-pulse"}`} />;
-}
+const money = (n, dp = 2) =>
+  Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
-function Stat({ label, value, tone = "slate" }) {
-  const tones = {
-    slate: "text-slate-100", amber: "text-amber-300", red: "text-red-300", green: "text-emerald-300", blue: "text-blue-300",
+const shortAddr = (a) => (a && a.length > 20 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a || "—");
+
+/**
+ * Design rule for this page: an admin should be able to glance at the top line and
+ * look away. Only things that need a human decision are visible by default.
+ * Everything diagnostic lives behind "Details".
+ */
+export default function AdminSweepHealth() {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [details, setDetails] = useState(false);
+
+  const load = useCallback(() => {
+    fetch(`${API}/api/admin/sweep-status`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((res) => setD(res.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const force = async (id, kind) => {
+    setBusy(id);
+    try {
+      const url =
+        kind === "persistent"
+          ? `${API}/api/admin/deposit-addresses/${id}/sweep`
+          : `${API}/api/admin/sweep-status/force`;
+      const body = kind === "persistent" ? {} : { pendingId: id };
+      const res = await fetch(url, { method: "POST", headers: hdr(), body: JSON.stringify(body) });
+      const r = await res.json();
+      r.status === 200 ? toast.success(r.message) : toast.error(r.message || "Failed");
+      load();
+    } catch {
+      toast.error("Failed");
+    }
+    setBusy(null);
   };
-  return (
-    <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3 text-center">
-      <div className={`text-2xl font-bold ${tones[tone]}`}>{value}</div>
-      <div className="text-[11px] text-slate-400 mt-1">{label}</div>
-    </div>
-  );
-}
 
-function FunderCard({ label, funder, unit, blocking }) {
-  if (!funder) {
+  if (!d) {
     return (
-      <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 p-4">
-        <div className="text-xs text-slate-400 mb-1">{label} gas funder</div>
-        <div className="text-sm text-slate-500">Not configured</div>
-      </div>
+      <AdminLayout title="Deposit Health">
+        <div className="h-40 animate-pulse rounded-2xl bg-slate-800/40" />
+      </AdminLayout>
     );
   }
+
+  const criticals = (d.alerts || []).filter((a) => a.level === "critical");
+  const minor = (d.alerts || []).filter((a) => a.level !== "critical");
+
+  // Combined money view — the only numbers that matter at a glance.
+  const pb = d.persistent?.bep20 || {};
+  const pt = d.persistent?.trc20 || {};
+  const credited = (pb.creditedTotal || 0) + (pt.creditedTotal || 0);
+  const swept = (pb.sweptTotal || 0) + (pt.sweptTotal || 0);
+  const awaiting = (pb.awaitingSweepTotal || 0) + (pt.awaitingSweepTotal || 0);
+
+  const toSweep = [
+    ...(pb.blocked || []).map((b) => ({ ...b, kind: "persistent", chain: "BSC" })),
+    ...(pt.blocked || []).map((b) => ({ ...b, kind: "persistent", chain: "Tron" })),
+    ...(d.legacy?.bep20?.stuck || []).map((s) => ({ ...s, kind: "legacy", chain: "BSC", awaiting: s.amount })),
+    ...(d.legacy?.trc20?.stuck || []).map((s) => ({ ...s, kind: "legacy", chain: "Tron", awaiting: s.amount })),
+  ];
+
+  const healthy = criticals.length === 0;
+
   return (
-    <div className={`rounded-xl border p-4 ${blocking ? "border-red-500/40 bg-red-500/5" : "border-slate-700/50 bg-slate-800/40"}`}>
-      <div className="flex items-center justify-between mb-1">
-        <div className="text-xs text-slate-400">{label} gas funder</div>
-        <div className="flex items-center gap-1.5 text-xs">
-          <Dot ok={funder.ok} />
-          <span className={funder.ok ? "text-emerald-300" : "text-red-300"}>{funder.ok ? "Healthy" : "Low"}</span>
+    <AdminLayout title="Deposit Health">
+      {/* ── One-line status ── */}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className={`h-2.5 w-2.5 rounded-full ${healthy ? "bg-emerald-400" : "bg-amber-400"}`} />
+          <span className="text-lg font-semibold text-slate-100">
+            {healthy
+              ? "Deposits running normally"
+              : `${criticals.length} item${criticals.length > 1 ? "s" : ""} need a decision`}
+          </span>
         </div>
-      </div>
-      <div className="text-xl font-bold text-slate-100">{funder.balance} {unit}</div>
-      <div className="text-[11px] font-mono text-slate-500 mt-1 break-all">{funder.address}</div>
-      {blocking && <div className="text-[11px] text-red-300 mt-2">⚠ Funder too low — deposits can't sweep. Top it up.</div>}
-    </div>
-  );
-}
-
-function ChainPanel({ title, chain, unit, onForce, forcing }) {
-  if (!chain) return null;
-  const funder = chain.gasFunder
-    ? { address: chain.gasFunder.address, balance: chain.gasFunder[unit === "BNB" ? "bnb" : "trx"], ok: chain.gasFunder.ok }
-    : null;
-  return (
-    <div className="rounded-2xl border border-slate-700/50 bg-slate-900/50 p-5">
-      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <Stat label="Awaiting deposit" value={chain.awaitingDeposit} />
-        <Stat label="Awaiting sweep" value={chain.awaitingSweep} tone={chain.awaitingSweep ? "amber" : "slate"} />
-        <Stat label="Swept" value={chain.swept} tone="green" />
-        <Stat label="Stuck > 3m" value={chain.stuckCount} tone={chain.stuckCount ? "red" : "slate"} />
+        <button
+          onClick={load}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
+        >
+          ↻
+        </button>
       </div>
 
-      <FunderCard label={title} funder={funder} unit={unit} blocking={chain.funderBlocking} />
+      {/* ── Money, always visible, three numbers ── */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        {[
+          ["Credited to users", credited, "text-slate-100"],
+          ["In treasury", swept, "text-emerald-300"],
+          ["Awaiting sweep", awaiting, awaiting > 0 ? "text-amber-300" : "text-slate-500"],
+        ].map(([label, val, tone]) => (
+          <div key={label} className="rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-4 text-center">
+            <div className={`text-2xl font-bold ${tone}`}>${money(val)}</div>
+            <div className="mt-1 text-[11px] text-slate-500">{label}</div>
+          </div>
+        ))}
+      </div>
 
-      {chain.stuck?.length > 0 && (
-        <div className="mt-4">
-          <div className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">Stuck deposits</div>
+      {/* ── Only what needs a decision ── */}
+      {criticals.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {criticals.map((a, i) => (
+            <div key={i} className="rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-3">
+              <div className="text-sm font-medium text-slate-200">{a.title}</div>
+              <div className="mt-0.5 text-xs text-slate-500">{a.detail}</div>
+              {a.action && <div className="mt-1.5 text-xs text-amber-300/80">{a.action}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Anything you can act on with one click ── */}
+      {toSweep.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Ready to sweep
+          </div>
           <div className="space-y-2">
-            {chain.stuck.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+            {toSweep.map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-3"
+              >
                 <div className="min-w-0">
-                  <div className="text-sm font-mono text-slate-200 truncate">{s.address}</div>
-                  <div className="text-[11px] text-slate-500">
-                    {s.amount} {s.asset} · waiting {s.waitingMinutes ?? "?"}m
-                    {s.lastFundedAt ? ` · funded ${new Date(s.lastFundedAt).toLocaleTimeString()}` : " · never funded"}
+                  <div className="text-sm text-slate-200">
+                    ${money(s.awaiting)}{" "}
+                    <span className="text-xs text-slate-500">
+                      · {s.chain} · {s.email || shortAddr(s.address)}
+                    </span>
                   </div>
+                  {s.blockedReason && <div className="mt-0.5 text-[11px] text-amber-300">{s.blockedReason}</div>}
                 </div>
-                <button
-                  onClick={() => onForce(s.id)}
-                  disabled={forcing === s.id}
-                  className="shrink-0 rounded-lg bg-brand/90 hover:bg-brand px-3 py-1.5 text-xs font-bold text-black disabled:opacity-50"
-                >
-                  {forcing === s.id ? "Sweeping…" : "Force sweep"}
-                </button>
+                {s.canForceSweep !== false ? (
+                  <button
+                    onClick={() => force(s.id, s.kind)}
+                    disabled={busy === s.id}
+                    className="shrink-0 rounded-lg border border-brand/40 bg-brand/15 px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-40"
+                  >
+                    {busy === s.id ? "…" : "Sweep"}
+                  </button>
+                ) : (
+                  <span className="shrink-0 text-xs text-slate-500">Needs key restore</span>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
-      {chain.stuck?.length === 0 && (
-        <div className="mt-4 text-center text-xs text-slate-500 py-3">No stuck deposits 🎉</div>
-      )}
-    </div>
-  );
-}
 
-export default function AdminSweepHealth() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [forcing, setForcing] = useState(null);
-
-  const load = useCallback(() => {
-    fetch(`${API}/api/admin/sweep-status`, { headers: hdr() })
-      .then(r => r.json())
-      .then(d => { setData(d.data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    load();
-    const iv = setInterval(load, 15000); // auto-refresh
-    return () => clearInterval(iv);
-  }, [load]);
-
-  const forceSweep = async (pendingId) => {
-    setForcing(pendingId);
-    try {
-      const res = await fetch(`${API}/api/admin/sweep-status/force`, {
-        method: "POST", headers: hdr(), body: JSON.stringify({ pendingId }),
-      });
-      const d = await res.json();
-      if (d.status === 200 && d.data?.swept) toast.success("Swept to treasury ✓");
-      else if (d.status === 200) toast(d.message || "Retry triggered", { icon: "⏳" });
-      else toast.error(d.message || "Force sweep failed");
-      load();
-    } catch { toast.error("Force sweep failed"); }
-    setForcing(null);
-  };
-
-  return (
-    <AdminLayout>
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Sweep Health</h1>
-            <p className="text-sm text-slate-400 mt-1">In-flight and stuck deposits, and gas-funder status. Auto-refreshes every 15s.</p>
-          </div>
-          <button onClick={load} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">
-            ↻ Refresh
-          </button>
+      {healthy && toSweep.length === 0 && (
+        <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/30 py-8 text-center text-sm text-slate-500">
+          Nothing needs attention.
         </div>
+      )}
 
-        {loading && !data ? (
-          <div className="text-center text-slate-500 py-20">Loading…</div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ChainPanel title="BSC (BEP-20)" chain={data?.bep20} unit="BNB" onForce={forceSweep} forcing={forcing} />
-            <ChainPanel title="Tron (TRC-20)" chain={data?.trc20} unit="TRX" onForce={forceSweep} forcing={forcing} />
+      {/* Per-chain breakdown — the structure from the earlier layout, quiet styling. */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        {[
+          ["BSC (BEP-20)", pb],
+          ["Tron (TRC-20)", pt],
+        ].map(([label, p]) => (
+          <div key={label} className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-300">{label}</span>
+              <span className="text-[10px] text-slate-600">{p?.addresses ?? 0} address(es)</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                ["Credited", p?.creditedTotal, "text-slate-200"],
+                ["In treasury", p?.sweptTotal, "text-emerald-300"],
+                ["Awaiting", p?.awaitingSweepTotal, (p?.awaitingSweepTotal || 0) > 0 ? "text-amber-300" : "text-slate-600"],
+              ].map(([l, v, tone]) => (
+                <div key={l} className="rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-2.5 text-center">
+                  <div className={`text-base font-semibold ${tone}`}>${money(v)}</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">{l}</div>
+                </div>
+              ))}
+            </div>
+            {(p?.awaitingSweepTotal || 0) === 0 && (p?.addresses || 0) > 0 && (
+              <div className="mt-2.5 text-center text-[11px] text-slate-600">
+                Everything credited has reached treasury
+              </div>
+            )}
           </div>
-        )}
-
-        {data?.generatedAt && (
-          <div className="text-center text-[11px] text-slate-600 mt-6">Last updated {new Date(data.generatedAt).toLocaleTimeString()}</div>
-        )}
+        ))}
       </div>
+
+      {/* ── Everything diagnostic, hidden by default ── */}
+      <button
+        onClick={() => setDetails((v) => !v)}
+        className="w-full rounded-xl border border-slate-800 px-4 py-2.5 text-left text-xs text-slate-500 hover:bg-slate-900/40"
+      >
+        {details ? "Hide details ▲" : "Details ▼"}
+        {minor.length > 0 && !details && <span className="ml-2 text-slate-600">· {minor.length} minor</span>}
+      </button>
+
+      {details && (
+        <div className="mt-3 space-y-4">
+          {minor.length > 0 && (
+            <div className="space-y-2">
+              {minor.map((a, i) => (
+                <div key={i} className="rounded-lg border border-slate-800 bg-slate-900/30 px-4 py-2.5">
+                  <div className="text-xs font-medium text-slate-300">{a.title}</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500">{a.detail}</div>
+                  {a.action && <div className="mt-1 text-[11px] text-slate-400">{a.action}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              ["BSC gas funder", d.funders?.bep20, "BNB"],
+              ["Tron gas funder", d.funders?.trc20, "TRX"],
+            ].map(([label, f, unit]) => (
+              <div key={label} className="rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">{label}</span>
+                  <span className={`text-[11px] ${f?.ok ? "text-emerald-400" : "text-amber-400"}`}>
+                    {f ? (f.ok ? "OK" : "Low") : "—"}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-sm text-slate-200">
+                  {f ? `${unit === "BNB" ? f.bnb : f.trx} ${unit}` : "Not configured"}
+                </div>
+                {f && <div className="mt-0.5 break-all font-mono text-[10px] text-slate-600">{f.address}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ["Scanner lag", `${d.scanner?.maxLagBlocks ?? 0} blocks`],
+              ["Credits queued", d.credits?.pending ?? 0],
+              ["Credits failed", d.credits?.failed ?? 0],
+            ].map(([l, v]) => (
+              <div key={l} className="rounded-lg border border-slate-800 bg-slate-900/30 px-3 py-2.5 text-center">
+                <div className="text-sm font-semibold text-slate-200">{v}</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">{l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              ["BSC addresses", d.persistent?.bep20],
+              ["Tron addresses", d.persistent?.trc20],
+            ].map(([l, p]) => (
+              <div key={l} className="rounded-lg border border-slate-800 bg-slate-900/30 p-3 text-[11px] text-slate-500">
+                <div className="mb-1 text-slate-300">{l}</div>
+                {p?.addresses ?? 0} active · ${money(p?.creditedTotal)} credited · ${money(p?.sweptTotal)} swept
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/30 p-3 text-[11px] text-slate-500">
+            <div className="mb-1 text-slate-300">Legacy one-time addresses</div>
+            BSC: {d.legacy?.bep20?.openSessions ?? 0} open · {d.legacy?.bep20?.awaitingSweep ?? 0} awaiting sweep
+            <br />
+            Tron: {d.legacy?.trc20?.openSessions ?? 0} open · {d.legacy?.trc20?.awaitingSweep ?? 0} awaiting sweep
+            <div className="mt-1 text-slate-600">Retire the old flow once both reach 0.</div>
+          </div>
+
+          <div className="text-center text-[10px] text-slate-700">
+            Updated {new Date(d.generatedAt).toLocaleTimeString()}
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
