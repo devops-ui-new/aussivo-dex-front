@@ -398,7 +398,7 @@ function MaturedYieldWallet({ user, withdrawals, loading, onWithdraw, seed }) {
           </div>
 
           <div className="mt-4 rounded-lg bg-brand/[0.06] border border-brand/15 px-3 py-2 text-[11px] text-slate-300">
-            Withdrawal requests are reviewed and disbursed by our team on-chain. As funds are accumulated and batched, payouts <span className="text-slate-100 font-medium">typically take 4–24 hours</span> to arrive in your connected wallet. You can track status under History.
+            Withdrawal requests are reviewed and disbursed on-chain. As funds are accumulated and batched, payouts <span className="text-slate-100 font-medium">typically take 4–24 hours</span> to arrive in your connected wallet. You can track status under History.
           </div>
         </div>
       </div>
