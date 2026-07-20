@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import { API } from "../../config/api";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("admin_token")}`, "Content-Type": "application/json" });
 
+
+
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [fin, setFin] = useState(null);
@@ -155,7 +157,7 @@ export default function AdminDashboard() {
                   <td className="py-3 text-right text-muted text-xs">{new Date(d.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
-              {(!data?.recentDeposits?.length) && <tr><td colSpan={5} className="py-10 text-center text-muted">No deposits yet</td></tr>}
+              {!(data?.recentDeposits || []).length && <tr><td colSpan={5} className="py-10 text-center text-muted">No deposits yet</td></tr>}
             </tbody>
           </table>
         </div>

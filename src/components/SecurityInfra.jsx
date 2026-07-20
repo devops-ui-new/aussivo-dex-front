@@ -59,9 +59,9 @@ export function KrystalVerichainsStrip({ className = "" }) {
         <span className="text-xs font-semibold text-slate-200">Powered by <span className="text-brand">Krystal Vaults</span></span>
       </a>
       <a href={VERICHAINS_REPORT} target="_blank" rel="noopener noreferrer"
-        className="group inline-flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-1.5 transition-colors hover:border-blue-400/30">
+        className="group inline-flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-1.5 transition-colors hover:border-teal-400/30">
         <VerichainsIcon size={18} />
-        <span className="text-xs font-semibold text-slate-200">Audited by <span className="text-blue-300">Verichains</span></span>
+        <span className="text-xs font-semibold text-slate-200">Audited by <span className="text-teal-300">Verichains</span></span>
       </a>
     </div>
   );
@@ -72,21 +72,31 @@ export default function SecurityInfra({ className = "" }) {
   const copy = (a) => { navigator.clipboard?.writeText(a); toast.success("Address copied"); };
 
   return (
-    <section className={`rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0c1120] to-[#0a0f1e] p-6 sm:p-8 ${className}`}>
-      <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-brand">Smart-contract security</div>
-      <h2 className="mt-2 max-w-3xl font-display text-2xl sm:text-3xl font-bold text-white">
-        All Aussivo smart contracts are powered by <span className="text-brand">Krystal Vaults</span> and independently <span className="text-blue-300">audited by Verichains</span>.
+    <section className={`relative overflow-hidden rounded-[28px] border border-brand/15 bg-[#020806] p-7 sm:p-10 ${className}`}>
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(65% 120% at 85% 0%, rgba(0,230,118,0.10) 0%, transparent 62%)" }}
+        aria-hidden
+      />
+      <div className="relative mb-4 flex items-center gap-3">
+        <span className="h-px w-8 bg-brand/50" aria-hidden />
+        <span className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-brand/90">
+          Smart-contract security
+        </span>
+      </div>
+      <h2 className="relative mt-0 max-w-3xl font-display text-2xl font-semibold tracking-[-0.01em] text-white sm:text-[2rem] sm:leading-tight">
+        All Aussivo smart contracts are powered by <span className="text-brand">Krystal Vaults</span> and independently <span className="text-teal-300">audited by Verichains</span>.
       </h2>
-      <p className="mt-3 max-w-3xl text-sm text-slate-400">
+      <p className="relative mt-4 max-w-2xl text-[15px] leading-relaxed text-slate-400">
         Aussivo builds on the battle-tested, open-source Krystal Vault framework — a modular vault
         architecture with automated rebalancing and on-chain policy enforcement — reviewed in an
         independent security audit by Verichains.
       </p>
 
       {/* Two badges */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="relative mt-8 grid gap-4 sm:grid-cols-2">
         <a href={KRYSTAL_REPO} target="_blank" rel="noopener noreferrer"
-          className="group flex items-center gap-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 transition-all hover:border-brand/40 hover:bg-white/[0.035]">
+          className="group flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 transition-all hover:border-brand/40 hover:bg-white/[0.035]">
           <div className="shrink-0"><KrystalIcon size={38} /></div>
           <div className="min-w-0">
             <div className="font-display text-base font-bold text-white">Powered by Krystal Vaults</div>
@@ -97,15 +107,15 @@ export default function SecurityInfra({ className = "" }) {
           </div>
         </a>
         <a href={VERICHAINS_REPORT} target="_blank" rel="noopener noreferrer"
-          className="group flex items-center gap-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 transition-all hover:border-blue-400/40 hover:bg-white/[0.035]">
+          className="group flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 transition-all hover:border-teal-400/40 hover:bg-white/[0.035]">
           <div className="shrink-0"><VerichainsIcon size={38} /></div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-display text-base font-bold text-white">Audited by Verichains</span>
-              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-300">v1.1</span>
+              <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300">v1.1</span>
             </div>
             <div className="text-xs text-slate-400">Independent smart-contract security audit</div>
-            <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-blue-300">Read the audit report
+            <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-teal-300">Read the audit report
               <svg className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
           </div>
@@ -113,16 +123,16 @@ export default function SecurityInfra({ className = "" }) {
       </div>
 
       {/* Contracts */}
-      <div className="mt-7 flex items-center justify-between">
+      <div className="relative mt-9 flex items-center justify-between">
         <h3 className="font-display text-sm font-bold text-slate-200">Krystal Vault contracts</h3>
         <a href={KRYSTAL_REPO} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-brand hover:underline">All contracts ↗</a>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
         {KRYSTAL_CONTRACTS.map((c) => (
-          <div key={c.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
+          <div key={c.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
-                <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <svg className="h-3.5 w-3.5 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 {c.name}
               </div>
               <div className="text-[11px] text-slate-500">{c.desc}</div>
@@ -136,7 +146,7 @@ export default function SecurityInfra({ className = "" }) {
           </div>
         ))}
       </div>
-      <p className="mt-4 text-[11px] text-slate-500">
+      <p className="relative mt-5 text-[11px] text-slate-500">
         Addresses shown are the canonical Krystal Vault v2 deployments (deterministic across supported EVM networks). Source: <a href={KRYSTAL_REPO} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-brand">krystal-vault-contracts-v2</a>.
       </p>
     </section>

@@ -1,6 +1,7 @@
 import brandLogo from "../assets/branding/logo-aussivo.png";
 import toast from "react-hot-toast";
 import OnChainTicker from "./OnChainTicker";
+import { Link } from "react-router-dom";
 import { KrystalVerichainsStrip } from "./SecurityInfra";
 import { CONTRACTS, explorerAddress, shortAddr } from "../config/chain";
 import {
@@ -67,7 +68,7 @@ export default function Footer() {
   return (
     <footer className="relative z-50 mt-20 border-t border-slate-600/40 bg-[#060b18] isolate">
       <div className="mx-auto max-w-7xl px-6 py-12">
-        <div className="grid min-w-0 gap-10 border-b border-slate-600/30 pb-10 lg:grid-cols-[1.2fr_0.8fr_0.8fr_1fr_1.8fr]">
+        <div className="grid min-w-0 gap-10 border-b border-slate-600/30 pb-10 lg:grid-cols-[1.3fr_0.8fr_0.8fr_1fr_1.9fr]">
           <div>
             <div className="mb-3 flex items-center gap-2.5">
               <img src={brandLogo} alt="Aussivo.DEX" className="h-8 w-auto" />
@@ -75,28 +76,47 @@ export default function Footer() {
             <p className="text-xs text-muted">Empowering Your Decentralized Future</p>
           </div>
 
-          <div>
-            <div className="mb-4 text-[1.35rem] font-semibold">Products</div>
-            <div className="space-y-2.5 text-sm text-slate-300">
-              <div>Live Demo</div>
-              <div>Architecture</div>
-              <div>Documentation</div>
+          <div className="relative z-20 min-w-0">
+            <div className="mb-4 text-[1.35rem] font-semibold">Quick Links</div>
+            <div className="flex flex-col items-start space-y-2.5 text-sm text-slate-300">
+              {/* In-app routes — react-router Link so navigation stays client-side. */}
+              {[
+                { to: "/", label: "Home" },
+                { to: "/pools", label: "Vaults" },
+                { to: "/swap", label: "Swap" },
+                { to: "/portfolio", label: "Portfolio" },
+                { to: "/referral", label: "Referral" },
+              ].map((l) => (
+                <Link
+                  key={l.to}
+                  to={l.to}
+                  className="relative z-30 inline-block cursor-pointer underline-offset-2 transition-colors hover:text-slate-100 hover:underline"
+                >
+                  {l.label}
+                </Link>
+              ))}
             </div>
           </div>
 
           <div className="relative z-20 min-w-0">
             <div className="mb-4 text-[1.35rem] font-semibold">Company</div>
-            <div className="space-y-2.5 text-sm text-slate-300">
-              <div>About</div>
-              <a
-                href="https://aussivo.com/blog"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative z-30 inline-block cursor-pointer underline-offset-2 transition-colors hover:text-slate-100 hover:underline"
-              >
-                Blogs
-              </a>
-              <div>Contact</div>
+            <div className="flex flex-col items-start space-y-2.5 text-sm text-slate-300">
+              {/* Marketing site — external, so plain anchors with noopener. */}
+              {[
+                { href: "https://aussivo.com/about-us", label: "About Us" },
+                { href: "https://aussivo.com/blog", label: "Blogs" },
+                { href: "https://aussivo.com/contact-us", label: "Contact Us" },
+              ].map((l) => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative z-30 inline-block cursor-pointer underline-offset-2 transition-colors hover:text-slate-100 hover:underline"
+                >
+                  {l.label}
+                </a>
+              ))}
             </div>
           </div>
 

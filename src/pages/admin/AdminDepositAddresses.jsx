@@ -8,6 +8,8 @@ const hdr = () => ({
   "Content-Type": "application/json",
 });
 
+
+
 const money = (n, dp = 2) => Number(n || 0).toLocaleString(undefined, {
   minimumFractionDigits: dp, maximumFractionDigits: dp,
 });
@@ -128,6 +130,7 @@ export default function AdminDepositAddresses() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [copied, setCopied] = useState(null);
   const [recoverAddr, setRecoverAddr] = useState(null);
 
   const load = useCallback(() => {
@@ -157,6 +160,23 @@ export default function AdminDepositAddresses() {
       toast.error("Failed");
     }
     setBusyId(null);
+  };
+
+  /**
+   * Copy the FULL address, not the truncated display value — the whole point of the
+   * button. The tick replaces the icon briefly so the action is visibly acknowledged
+   * even if the toast is missed.
+   */
+  const copyAddress = async (addr) => {
+    if (!addr) return;
+    try {
+      await navigator.clipboard.writeText(addr);
+      setCopied(addr);
+      toast.success("Address copied");
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      toast.error("Could not copy — select the address manually");
+    }
   };
 
   const h = data?.health || {};
@@ -222,7 +242,31 @@ export default function AdminDepositAddresses() {
                   <div className="text-slate-200">{a.user?.name || "—"}</div>
                   <div className="text-[11px] text-slate-500">{a.user?.email}</div>
                 </td>
-                <td className="p-3 font-mono text-xs text-slate-300">{shortAddr(a.address)}</td>
+                <td className="p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-slate-300" title={a.address}>
+                      {shortAddr(a.address)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyAddress(a.address)}
+                      title="Copy full address"
+                      aria-label={`Copy address ${a.address}`}
+                      className="shrink-0 rounded p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-brand"
+                    >
+                      {copied === a.address ? (
+                        <svg className="h-3.5 w-3.5 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : (
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="11" height="11" rx="2" />
+                          <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </td>
                 <td className="p-3">
                   <span className={`rounded px-2 py-0.5 text-[11px] ${a.network === "trc20" ? "bg-red-500/15 text-red-300" : "bg-yellow-500/15 text-yellow-300"}`}>
                     {a.network === "trc20" ? "TRC-20" : "BEP-20"}

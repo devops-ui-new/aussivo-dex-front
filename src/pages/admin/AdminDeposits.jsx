@@ -15,6 +15,13 @@ function originOf(d) {
   return { label: "—", cls: "" };
 }
 
+
+/**
+ * Settled outside the platform — hidden from admin. Mirrors AdminSweepHealth /
+ * AdminDepositAddresses. Matched case-insensitively and by prefix, because deposits
+ * store a lowercased walletAddress while the explorer shows mixed case.
+ */
+
 export default function AdminDeposits() {
   const [deposits, setDeposits] = useState([]);
   const [total, setTotal] = useState(0);

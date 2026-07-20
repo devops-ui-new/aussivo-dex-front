@@ -9,7 +9,7 @@ import brandLogo from "../assets/branding/logo-aussivo.png";
 
 const NAV = [
   { to: "/", label: "Home" },
-  { to: "/pools", label: "Earn" },
+  { to: "/pools", label: "Vaults" },
   { to: "/swap", label: "Swap" },
   { to: "/portfolio", label: "Portfolio" },
   { to: "/referral", label: "Referral" },

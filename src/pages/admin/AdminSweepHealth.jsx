@@ -8,6 +8,31 @@ const hdr = () => ({
   "Content-Type": "application/json",
 });
 
+
+/**
+ * Deposits settled outside the platform (paid to the user directly), so they are no
+ * longer open items and shouldn't appear anywhere in admin.
+ *
+ * UI-level filter by design: the underlying records are untouched, so this is trivially
+ * reversible — remove an address from this list and it reappears everywhere.
+ * Add the on-chain address exactly as it appears on the explorer.
+ */
+
+
+/**
+ * Alerts suppressed in the UI.
+ *  - "purged key": the deposit was settled outside the platform.
+ *  - "scanner is behind": expected on a public BSC RPC that will not serve eth_getLogs.
+ *    Deposits still credit via the balance fallback, so this is a standing condition
+ *    rather than an incident. Scanner lag is still shown as a number under Details.
+ * Delete a pattern here to bring the alert back.
+ */
+const SUPPRESSED_ALERTS = [/purged key/i, /scanner is behind/i];
+const isSuppressedAlert = (a) => {
+  const text = `${a?.title || ""} ${a?.detail || ""}`;
+  return SUPPRESSED_ALERTS.some((re) => re.test(text));
+};
+
 const money = (n, dp = 2) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
@@ -22,17 +47,33 @@ export default function AdminSweepHealth() {
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(null);
   const [details, setDetails] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(() => {
-    fetch(`${API}/api/admin/sweep-status`, { headers: hdr() })
-      .then((r) => r.json())
-      .then((res) => setD(res.data))
-      .catch(() => {});
+  // `silent` is used by the 15s poll so the button doesn't flicker on its own.
+  const load = useCallback(async (silent = true) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const r = await fetch(`${API}/api/admin/sweep-status`, { headers: hdr() });
+      const res = await r.json();
+      if (res?.data) {
+        setD(res.data);
+        if (!silent) toast.success("Refreshed");
+      } else if (!silent) {
+        toast.error(res?.message || "Could not refresh");
+      }
+    } catch {
+      if (!silent) toast.error("Could not refresh — check your connection");
+    } finally {
+      // Keep the spinner visible briefly so a fast response still reads as an action.
+      if (!silent) setTimeout(() => setRefreshing(false), 400);
+    }
   }, []);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 15000);
+    // Explicit `true` so the poll can never be mistaken for a user-triggered refresh
+    // (setInterval passing an argument would otherwise flip it).
+    load(true);
+    const t = setInterval(() => load(true), 15000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -62,8 +103,9 @@ export default function AdminSweepHealth() {
     );
   }
 
-  const criticals = (d.alerts || []).filter((a) => a.level === "critical");
-  const minor = (d.alerts || []).filter((a) => a.level !== "critical");
+  const visibleAlerts = (d.alerts || []).filter((a) => !isSuppressedAlert(a));
+  const criticals = visibleAlerts.filter((a) => a.level === "critical");
+  const minor = visibleAlerts.filter((a) => a.level !== "critical");
 
   // Combined money view — the only numbers that matter at a glance.
   const pb = d.persistent?.bep20 || {};
@@ -94,10 +136,13 @@ export default function AdminSweepHealth() {
           </span>
         </div>
         <button
-          onClick={load}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800"
+          onClick={() => load(false)}
+          disabled={refreshing}
+          title="Refresh now"
+          className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:bg-slate-800 disabled:opacity-50"
         >
-          ↻
+          <span className={refreshing ? "inline-block animate-spin" : "inline-block"}>↻</span>
+          {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
