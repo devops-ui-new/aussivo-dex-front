@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useWeb3 } from "../context/Web3Context";
 import toast from "react-hot-toast";
@@ -882,6 +882,86 @@ function GroupDetailModal({ deposits, onOpenDeposit, onClose }) {
   );
 }
 
+
+/**
+ * Step-up verification for withdrawals.
+ *
+ * A wallet-connected session can browse but not move money, so the first withdrawal in
+ * that session asks for the emailed code. Deliberately small: one field, one button,
+ * and the code is already on its way when this opens.
+ */
+function VerifyStepUpModal({ email, onVerified, onClose, expired }) {
+  // Use the CONTEXT's sendOTP/verifyOTP rather than raw fetch: verifyOTP calls setToken,
+  // so the upgraded session propagates through the whole app. Writing only to
+  // localStorage left React state holding the old token.
+  const { sendOTP, verifyOTP } = useWeb3();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    if (sentRef.current || !email) return; // StrictMode double-invokes effects
+    sentRef.current = true;
+    sendOTP(email)
+      .then((r) => {
+        if (r?.status === 200) setSent(true);
+        else toast.error(r?.message || "Could not send the code");
+      })
+      .catch(() => toast.error("Could not send the code"));
+  }, [email, sendOTP]);
+
+  const submit = async () => {
+    if (code.trim().length < 6 || busy) return;
+    setBusy(true);
+    try {
+      const d = await verifyOTP(email, code.trim());
+      if (d?.status === 200 && d.data?.token) {
+        toast.success("Verified");
+        onVerified(d.data.token);
+      } else {
+        toast.error(d?.message || "Incorrect code");
+        setCode("");
+      }
+    } catch { toast.error("Verification failed"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="glass w-full max-w-sm rounded-2xl p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-display text-lg font-bold text-white">{expired ? "Confirm again" : "Confirm it's you"}</h3>
+        <p className="mt-2 text-sm text-slate-400">
+          {expired && "Your last verification has expired. "}
+          {sent ? "We sent a 6-digit code to" : "Sending a code to"}{" "}
+          <span className="text-slate-200">{email}</span>. Enter it to continue with your withdrawal.
+        </p>
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="000000"
+          inputMode="numeric"
+          autoFocus
+          className="mt-4 w-full rounded-xl border border-surface-4/60 bg-surface-2/50 px-4 py-3 text-center font-mono text-2xl tracking-[0.4em] text-white"
+        />
+        <div className="mt-5 flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-surface-4/60 py-2.5 text-sm font-semibold text-slate-300">
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy || code.length < 6}
+            className="flex-1 rounded-xl bg-gradient-to-r from-brand-dark to-brand py-2.5 text-sm font-display font-bold text-white disabled:opacity-40"
+          >
+            {busy ? "Checking…" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const { token, user, refreshUser } = useWeb3();
   const [deposits, setDeposits] = useState([]);
@@ -893,8 +973,15 @@ export default function Portfolio() {
   const [detailGroupKey, setDetailGroupKey] = useState(null); // pool (vault+asset) shown in the grouped breakdown modal
   const [loading, setLoading] = useState(null);
   const [tab, setTab] = useState("overview"); // overview | yield | history
+  const [stepUp, setStepUp] = useState(null); // { retry: () => void } when re-verification is needed
 
-  const hdr = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+  // Read the token at CALL time, not from the closure. After step-up verification the
+  // session is upgraded, but any handler captured before that still closes over the old
+  // token — which sent the stale token on retry and looped the OTP prompt forever.
+  const hdr = () => ({
+    Authorization: `Bearer ${localStorage.getItem("aussivo_token") || token}`,
+    "Content-Type": "application/json",
+  });
 
   const load = () => {
     if (!token) return;
@@ -924,7 +1011,11 @@ export default function Portfolio() {
       });
       const d = await res.json();
       if (d.status === 201) { setProcessingModal({ amount, asset, kind: source === "referral" ? "referral" : "yield" }); load(); }
-      else toast.error(d.message);
+      else if (d.error === "verification_required") {
+        toast("Confirm it's you to continue", { icon: "🔒" });
+        setStepUp({ retry: () => handleWithdraw(amount, asset, source), expired: d.data?.reason === "verification_expired" });
+      }
+      else toast.error(d.message || "Withdrawal could not be submitted");
     } catch { toast.error("Failed"); }
     setLoading(false);
   };
@@ -946,6 +1037,12 @@ export default function Portfolio() {
     setLoading(deposit._id);
     try {
       const d = await postWithdraw({ source: "deposit", depositId: deposit._id, walletAddress: user.walletAddress });
+      if (d.error === "verification_required") {
+        toast("Confirm it's you to continue", { icon: "🔒" });
+        setStepUp({ retry: () => redeemPrincipal(deposit), expired: d.data?.reason === "verification_expired" });
+        setLoading(null);
+        return;
+      }
       if (d.status === 201) {
         setRedeemModal(null);
         setProcessingModal({
@@ -1220,6 +1317,13 @@ export default function Portfolio() {
           onClose={() => setRedeemModal(null)}
         />, document.body)}
       {processingModal && createPortal(<WithdrawProcessingModal info={processingModal} onClose={() => setProcessingModal(null)} />, document.body)}
+      {stepUp && createPortal(
+        <VerifyStepUpModal
+          email={user?.email}
+          expired={stepUp.expired}
+          onClose={() => setStepUp(null)}
+          onVerified={() => { const r = stepUp.retry; setStepUp(null); setTimeout(r, 100); }}
+        />, document.body)}
     </div>
   );
 }

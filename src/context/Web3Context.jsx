@@ -219,11 +219,19 @@ export function Web3Provider({ children }) {
     if (data.status === 200 && data.data?.token) {
       setToken(data.data.token); setUser(data.data.user);
       localStorage.setItem("aussivo_token", data.data.token);
+      // OTP-verified = full session: withdrawals and wallet linking are unlocked.
+      localStorage.setItem("aussivo_auth_level", data.data.authLevel || "otp");
     }
     return data;
   };
 
-  /** Returning users: wallet already linked → JWT without email OTP */
+  /**
+   * Returning users: connect a known wallet and get a session. No signing, no OTP.
+   *
+   * This session is LIMITED server-side (authLevel 'wallet') — it can browse the
+   * portfolio but cannot withdraw or link a new payout wallet. Those ask for the email
+   * code at the moment they are used, which is where users expect a check anyway.
+   */
   const loginWithWallet = useCallback(async (walletAddress) => {
     if (!walletAddress) return { ok: false, needsRegistration: false };
     const res = await fetch(`${API}/api/user/wallet-auth`, {
@@ -236,6 +244,7 @@ export function Web3Provider({ children }) {
       setToken(data.data.token);
       setUser(data.data.user);
       localStorage.setItem("aussivo_token", data.data.token);
+      localStorage.setItem("aussivo_auth_level", data.data.authLevel || "wallet");
       return { ok: true, needsRegistration: false };
     }
     if (data.status === 200 && data.data?.registered === false) {
@@ -244,10 +253,8 @@ export function Web3Provider({ children }) {
     return { ok: false, needsRegistration: false, error: data.message };
   }, []);
 
-  // Wallet is connected but there's no valid session (e.g. the JWT expired): if that wallet is
-  // registered, sign back in silently — no OTP, no manual reconnect. Tried at most once per
-  // wallet per session, so an unregistered wallet won't loop; it just falls through to the
-  // normal Connect → email/OTP flow. Skipped while signing out.
+  // Wallet connected but no session (e.g. the JWT expired): sign back in silently.
+  // Tried at most once per wallet per session.
   useEffect(() => {
     if (!account || token || isSigningOutRef.current) return;
     let key;
