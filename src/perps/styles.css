@@ -1,0 +1,1952 @@
+/*
+ * Perp terminal styles — ported from BuilderFi and scoped under `.perp-terminal`.
+ *
+ * Everything below is prefixed with that class so the terminal's dense resets
+ * (`*`, `body`, bare `button`/`input` rules) stay inside the trading route and
+ * cannot reach the Tailwind-styled pages. The only deliberately global rules are
+ * `body.resizing-x/y`, which Resizer sets on document.body during a drag.
+ *
+ * Tokens below are Aussivo's palette (tailwind.config.js + index.css), not
+ * BuilderFi's: brand green replaces the orange accent, surface-0..4 replace the
+ * neutral greys, and the fonts are Outfit/DM Sans.
+ */
+.perp-terminal {
+  --bg: #060b18;          /* surface-0 */
+  --bg-panel: #0b1121;    /* surface-1 */
+  --bg-elevated: #111827; /* surface-2 */
+  --bg-hover: #1a2235;    /* surface-3 */
+  --border: #1a2235;      /* surface-3 — grid lines need to read as solid */
+  --border-glow: rgba(0, 230, 118, 0.14);
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;  /* muted */
+  --green: #00e676;       /* brand */
+  --green-bg: rgba(0, 230, 118, 0.12);
+  --red: #f6465d;
+  --red-bg: rgba(246, 70, 93, 0.12);
+  --accent: #00e676;      /* brand — was BuilderFi orange */
+  --accent-hover: #69f0ae;/* brand.light */
+  /* Dark ink for text sitting on brand-green fills; white fails contrast there. */
+  --on-accent: #052e16;
+  --font: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', 'DM Sans', sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Roboto Mono', Menlo, monospace;
+}
+
+.perp-terminal, .perp-terminal * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.perp-terminal {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.perp-terminal button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.perp-terminal input,
+.perp-terminal select {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.perp-terminal ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.perp-terminal ::-webkit-scrollbar-thumb {
+  background: #2c2c34;
+  border-radius: 3px;
+}
+
+.perp-terminal .num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.perp-terminal .up {
+  color: var(--green);
+}
+.perp-terminal .down {
+  color: var(--red);
+}
+.perp-terminal .dim {
+  color: var(--text-dim);
+}
+
+/* ---------- app frame ---------- */
+.perp-terminal .app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Desktop (default, ≥1280px): chart | book | rail, bottom under chart+book. */
+.perp-terminal .terminal {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6px var(--side-w, 340px) 6px var(--rail-w, 340px);
+  grid-template-rows: minmax(0, 1fr) 6px var(--bottom-h, 300px);
+  grid-template-areas:
+    'main   cz1 side   cz2 rail'
+    'rz     rz  rz     cz2 rail'
+    'bottom bottom bottom cz2 rail';
+  gap: 0;
+  padding: 6px;
+  min-height: 0;
+}
+
+.perp-terminal .slot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.perp-terminal .slot--main {
+  grid-area: main;
+}
+.perp-terminal .slot--side {
+  grid-area: side;
+}
+.perp-terminal .slot--rail {
+  grid-area: rail;
+}
+.perp-terminal .slot--bottom {
+  grid-area: bottom;
+}
+
+/* ---------- panel cards ---------- */
+.perp-terminal .panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.12s ease;
+}
+.perp-terminal .panel--drop {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.perp-terminal .panel__bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: grab;
+  user-select: none;
+  flex: 0 0 auto;
+}
+.perp-terminal .panel__bar:active {
+  cursor: grabbing;
+}
+.perp-terminal .panel__grip {
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: -1px;
+}
+.perp-terminal .panel__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.perp-terminal .panel__actions {
+  margin-left: auto;
+}
+
+.perp-terminal .panel__body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Block layout, not flex: in a flex column the ticket would compress to fit
+   instead of overflowing, so the rail would never actually scroll. */
+.perp-terminal .panel__body--scroll {
+  display: block;
+  overflow-y: auto;
+}
+
+/* ---------- splitters ---------- */
+.perp-terminal .rz {
+  position: relative;
+  z-index: 5;
+}
+.perp-terminal .rz::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: transparent;
+  border-radius: 2px;
+  transition: background 0.12s ease;
+}
+.perp-terminal .rz--x {
+  cursor: col-resize;
+}
+.perp-terminal .rz--x::after {
+  width: 2px;
+  height: 34px;
+}
+.perp-terminal .rz--y {
+  cursor: row-resize;
+}
+.perp-terminal .rz--y::after {
+  height: 2px;
+  width: 34px;
+}
+.perp-terminal .rz:hover::after {
+  background: var(--accent);
+}
+
+/* Keep the cursor consistent while dragging over the chart canvas. */
+body.resizing-x,
+body.resizing-x * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+body.resizing-y,
+body.resizing-y * {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+.perp-terminal .layout-reset {
+  position: absolute;
+  right: 10px;
+  bottom: 2px;
+  z-index: 6;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.perp-terminal .terminal:hover .layout-reset {
+  opacity: 0.65;
+}
+.perp-terminal .layout-reset:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+/* Tablet / small laptop: two columns, book drops under the chart. */
+@media (max-width: 1279px) {
+  .perp-terminal {
+    overflow: auto;
+  }
+  .perp-terminal .app {
+    height: auto;
+    min-height: 100vh;
+  }
+  /* Below this width the tracks are too tight to resize meaningfully — fall back
+     to a fixed stack and hide the splitters. */
+  .perp-terminal .terminal {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-rows: 420px 420px 300px;
+    grid-template-areas:
+      'main   rail'
+      'side   rail'
+      'bottom bottom';
+    gap: 6px;
+  }
+  .perp-terminal .rz,
+.perp-terminal .layout-reset {
+    display: none;
+  }
+}
+
+/* Phone: single column, everything stacks and the page scrolls. */
+@media (max-width: 767px) {
+  .perp-terminal .terminal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 340px auto 480px auto;
+    grid-template-areas:
+      'main'
+      'rail'
+      'side'
+      'bottom';
+  }
+  .perp-terminal .slot--bottom {
+    min-height: 240px;
+  }
+}
+
+/* ---------- top nav ---------- */
+.perp-terminal .nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 16px;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.perp-terminal .nav__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.perp-terminal .nav__logo-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.perp-terminal .nav__links {
+  display: flex;
+  gap: 22px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+@media (max-width: 767px) {
+  .perp-terminal .nav {
+    gap: 14px;
+    padding: 0 12px;
+  }
+  .perp-terminal .nav__links {
+    gap: 14px;
+  }
+}
+
+.perp-terminal .nav__link {
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 6px 0;
+}
+.perp-terminal .nav__link:hover,
+.perp-terminal .nav__link--active {
+  color: var(--text);
+}
+
+.perp-terminal .btn-accent {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 8px;
+}
+.perp-terminal .btn-accent:hover {
+  background: var(--accent-hover);
+}
+
+.perp-terminal .nav__gear {
+  color: var(--text-dim);
+  font-size: 16px;
+  padding: 6px;
+}
+
+.perp-terminal .btn-accent--chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12.5px;
+}
+.perp-terminal .btn-accent--chip:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- modal ---------- */
+.perp-terminal .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.perp-terminal .modal {
+  width: min(420px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+}
+.perp-terminal .modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.perp-terminal .modal__head h3 {
+  font-size: 16px;
+}
+.perp-terminal .modal__close {
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 4px;
+}
+.perp-terminal .modal__note {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0 12px;
+}
+.perp-terminal .modal__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.perp-terminal .modal__icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+}
+.perp-terminal .modal__option:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.perp-terminal .modal__error {
+  color: var(--red);
+  font-size: 12px;
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+/* ---------- ticker strip ---------- */
+.perp-terminal .ticker {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 16px;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.perp-terminal .ticker__star {
+  color: #e7b416;
+}
+
+.perp-terminal .ticker__item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.perp-terminal .ticker__item b {
+  font-weight: 600;
+}
+
+/* ---------- market header ---------- */
+.perp-terminal .mkthead {
+  display: flex;
+  align-items: center;
+  gap: 20px 28px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.perp-terminal .mkthead__coin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+}
+
+.perp-terminal .coin-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f7931a;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.perp-terminal .mkthead__caret {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.perp-terminal .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.perp-terminal .stat__label {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.perp-terminal .stat__value {
+  font-size: 13px;
+}
+
+/* market picker panel — portaled to <body> with fixed positioning so no
+   overflow/scroll ancestor can clip it */
+.perp-terminal .mpanel {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: #0e0e12;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+
+.perp-terminal .mpanel__searchrow {
+  padding: 14px 14px 6px;
+  flex-shrink: 0;
+}
+.perp-terminal .mpanel__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 40px;
+}
+.perp-terminal .mpanel__search:focus-within {
+  border-color: var(--accent);
+}
+.perp-terminal .mpanel__search input {
+  flex: 1;
+  font-size: 13.5px;
+  min-width: 0;
+}
+.perp-terminal .mpanel__searchicon {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.perp-terminal .mpanel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 14px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.perp-terminal .mpanel__tabs--sub {
+  border-bottom: none;
+  padding-top: 8px;
+}
+.perp-terminal .mpanel__tab {
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+}
+.perp-terminal .mpanel__tab:hover:not(:disabled) {
+  color: var(--text);
+}
+.perp-terminal .mpanel__tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.perp-terminal .mpanel__tabs--sub .mpanel__tab--active {
+  border-bottom-color: transparent;
+  color: var(--accent);
+}
+.perp-terminal .mpanel__tab--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.perp-terminal .mpanel__scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.perp-terminal .mpanel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.perp-terminal .mpanel__table th {
+  position: sticky;
+  top: 0;
+  background: #0e0e12;
+  text-align: right;
+  color: var(--text-dim);
+  font-weight: 500;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  z-index: 1;
+}
+.perp-terminal .mpanel__table th.mpanel__symhead {
+  text-align: left;
+}
+.perp-terminal .mpanel__sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.perp-terminal .mpanel__sortable:hover {
+  color: var(--text);
+}
+.perp-terminal .mpanel__table td {
+  padding: 9px 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+.perp-terminal .mpanel__table tbody tr {
+  cursor: pointer;
+}
+.perp-terminal .mpanel__table tbody tr:hover {
+  background: var(--bg-hover);
+}
+.perp-terminal .mpanel__sym {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left !important;
+}
+.perp-terminal .mpanel__star {
+  color: var(--text-faint);
+  font-size: 14px;
+  padding: 0 2px;
+}
+.perp-terminal .mpanel__star--on {
+  color: #e7b416;
+}
+.perp-terminal .mpanel__lev {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* Narrow screens: keep the essential columns only */
+@media (max-width: 700px) {
+  .perp-terminal .mpanel__table th:nth-child(4),
+.perp-terminal .mpanel__table td:nth-child(4),
+.perp-terminal .mpanel__table th:nth-child(6),
+.perp-terminal .mpanel__table td:nth-child(6) {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .perp-terminal .mpanel__table th:nth-child(5),
+.perp-terminal .mpanel__table td:nth-child(5) {
+    display: none;
+  }
+}
+
+/* ---------- chart ---------- */
+.perp-terminal .chart {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.perp-terminal .chart__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.perp-terminal .tf-btn {
+  padding: 5px 9px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+.perp-terminal .tf-btn:hover {
+  color: var(--text);
+}
+.perp-terminal .tf-btn--active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.perp-terminal .chart__canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.perp-terminal .chart__legend {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 10;
+  font-size: 12px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.perp-terminal .chart__legend .num {
+  font-size: 12px;
+}
+
+.perp-terminal .chart__spacer {
+  flex: 1;
+}
+.perp-terminal .chart__venue {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* Crosshair OHLC readout above the canvas. */
+.perp-terminal .chart__ohlc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 5px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  min-height: 26px;
+}
+.perp-terminal .chart__ohlc .num {
+  font-size: 12px;
+}
+
+/* MA period legend, floated over the price pane. */
+.perp-terminal .chart__ma {
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+  pointer-events: none;
+}
+
+/* ---------- order book / trades ---------- */
+.perp-terminal .book {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.perp-terminal .panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.perp-terminal .panel-tab {
+  flex: 1;
+  text-align: center;
+  padding: 12px 16px;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+}
+.perp-terminal .panel-tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.perp-terminal .book__cols,
+.perp-terminal .book__row,
+.perp-terminal .book__spread {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1.1fr;
+  column-gap: 14px;
+  padding: 2px 12px;
+  font-size: 12px;
+}
+
+.perp-terminal .book__cols {
+  color: var(--text-dim);
+  padding: 8px 12px;
+  font-size: 11.5px;
+}
+
+/* Price stays left; Amount and Total right-align. Rows are targeted from the
+   end because the absolutely-positioned depth bar is the first child. */
+.perp-terminal .book__cols :nth-child(2),
+.perp-terminal .book__cols :nth-child(3) {
+  text-align: right;
+}
+.perp-terminal .book__row span:nth-last-child(-n + 2) {
+  text-align: right;
+}
+
+.perp-terminal .book__rows {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.perp-terminal .book__side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+.perp-terminal .book__side--bids {
+  justify-content: flex-start;
+}
+
+.perp-terminal .book__row {
+  position: relative;
+  line-height: 21px;
+  cursor: pointer;
+}
+.perp-terminal .book__row:hover {
+  background: var(--bg-hover);
+}
+
+.perp-terminal .book__depth {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 0;
+  pointer-events: none;
+}
+.perp-terminal .book__depth--ask {
+  background: var(--red-bg);
+}
+.perp-terminal .book__depth--bid {
+  background: var(--green-bg);
+}
+
+.perp-terminal .book__spread {
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  line-height: 26px;
+  font-size: 12px;
+}
+
+.perp-terminal .book__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.perp-terminal .book__swatches {
+  display: flex;
+  gap: 4px;
+}
+.perp-terminal .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.perp-terminal .select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* trades list */
+.perp-terminal .trades {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ---------- order ticket ---------- */
+.perp-terminal .ticket {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.perp-terminal .ticket__toprow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.perp-terminal .chip {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--text);
+}
+.perp-terminal .chip:hover {
+  background: var(--bg-hover);
+}
+.perp-terminal .chip--select {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.perp-terminal .sideswitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.perp-terminal .sideswitch__btn {
+  padding: 10px 0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13.5px;
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+}
+.perp-terminal .sideswitch__btn--buy.sideswitch__btn--on {
+  background: var(--green);
+  color: #06281c;
+}
+.perp-terminal .sideswitch__btn--sell.sideswitch__btn--on {
+  background: var(--red);
+  color: #fff;
+}
+
+.perp-terminal .kv {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.perp-terminal .kv .dim {
+  color: var(--text-dim);
+}
+
+.perp-terminal .field {
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 38px;
+  margin-top: 8px;
+}
+.perp-terminal .field input {
+  flex: 1;
+  font-size: 13.5px;
+  font-family: var(--mono);
+  min-width: 0;
+}
+.perp-terminal .field__unit {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-left: 8px;
+}
+/* A leading label needs the gap on its right, not its left — otherwise a
+   left-aligned value butts straight against it ("Amount50"). */
+.perp-terminal .field__unit:first-child {
+  margin-left: 0;
+  margin-right: 10px;
+}
+.perp-terminal .field--half {
+  flex: 1;
+  min-width: 0; /* allow shrinking below the input's intrinsic width */
+  margin-top: 0;
+}
+.perp-terminal .fieldrow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* slider */
+.perp-terminal .slider {
+  margin: 14px 2px 4px;
+}
+.perp-terminal .slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill, 0%),
+    #2c2c34 var(--fill, 0%)
+  );
+  outline: none;
+}
+.perp-terminal .slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+.perp-terminal .slider__marks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.perp-terminal .ticket__opts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.perp-terminal .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.perp-terminal .check input {
+  accent-color: var(--accent);
+}
+.perp-terminal .ticket__opts .select {
+  margin-left: auto;
+}
+
+.perp-terminal .ticket__cta {
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 0;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.perp-terminal .ticket__cta--connect {
+  background: var(--accent);
+  color: #fff;
+}
+.perp-terminal .ticket__cta--connect:hover {
+  background: var(--accent-hover);
+}
+.perp-terminal .ticket__cta--buy {
+  background: var(--green);
+  color: #06281c;
+}
+.perp-terminal .ticket__cta--sell {
+  background: var(--red);
+  color: #fff;
+}
+
+.perp-terminal .ticket__foot {
+  margin-top: 12px;
+}
+
+/* ---------- account panel ---------- */
+.perp-terminal .account {
+  padding: 12px;
+  font-size: 12.5px;
+}
+/* ---------- funding modal ---------- */
+.perp-terminal .fundmodal .field {
+  margin-top: 10px;
+}
+.perp-terminal .fund__tabs {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.perp-terminal .fund__tab {
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+}
+.perp-terminal .fund__tab--on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.perp-terminal .fund__bals {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.perp-terminal .fund__dir {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.perp-terminal .fund__dirbtn {
+  flex: 1;
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.perp-terminal .fund__dirbtn--on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.03);
+}
+.perp-terminal .fund__max {
+  padding: 2px 7px;
+  margin-right: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.perp-terminal .fund__note {
+  margin: 10px 0 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.perp-terminal .fund__note--info {
+  padding: 9px 10px;
+  color: var(--text);
+  background: rgba(74, 158, 255, 0.08);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 7px;
+}
+.perp-terminal .fund__ext {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.perp-terminal .fund__ext:hover {
+  color: var(--text);
+}
+
+/* Indented breakdown under a total (unified account equity). */
+.perp-terminal .kv--sub {
+  padding-left: 8px;
+  font-size: 11.5px;
+}
+
+.perp-terminal .spot-nudge {
+  display: block;
+  width: 100%;
+  margin: 10px 0 2px;
+  padding: 7px 9px;
+  text-align: left;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: rgba(240, 160, 32, 0.09);
+  border: 1px solid rgba(240, 160, 32, 0.35);
+  border-radius: 7px;
+}
+.perp-terminal .spot-nudge:hover {
+  background: rgba(240, 160, 32, 0.16);
+}
+
+.perp-terminal .account__row2 {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.perp-terminal .btn-soft {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 0;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.perp-terminal .btn-soft:hover {
+  background: var(--bg-hover);
+}
+.perp-terminal .btn-soft--wide {
+  width: 100%;
+}
+.perp-terminal .account h4 {
+  margin: 14px 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ---------- bottom panel ---------- */
+.perp-terminal .bottom {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.perp-terminal .bottom__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.perp-terminal .bottom__tab {
+  padding: 11px 10px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+}
+.perp-terminal .bottom__tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.perp-terminal .bottom__spacer {
+  flex: 1;
+}
+.perp-terminal .bottom__body {
+  flex: 1;
+  overflow: auto;
+}
+
+.perp-terminal table.ptable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.perp-terminal table.ptable th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.perp-terminal table.ptable td {
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.perp-terminal .empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 80px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+/* ---------- status bar ---------- */
+.perp-terminal .statusbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 30px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--bg);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.perp-terminal .statusbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.perp-terminal .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 5px;
+}
+.perp-terminal .dot--on {
+  background: var(--green);
+}
+.perp-terminal .dot--off {
+  background: var(--red);
+}
+
+/* ---------- toasts ---------- */
+.perp-terminal .toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 44px;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+.perp-terminal .toast {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: toast-in 0.18s ease-out;
+}
+.perp-terminal .toast--success {
+  border-left-color: var(--green);
+}
+.perp-terminal .toast--error {
+  border-left-color: var(--red);
+}
+.perp-terminal .toast__detail {
+  color: var(--text-dim);
+  word-break: break-word;
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ---------- leverage popover ---------- */
+.perp-terminal .levwrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+.perp-terminal .levwrap .chip {
+  flex: 1;
+}
+.perp-terminal .levpop {
+  position: absolute;
+  top: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.perp-terminal .levpop input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.perp-terminal .levpop__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+.perp-terminal .levpop__row .btn-soft {
+  flex: 0 0 auto;
+  padding: 5px 14px;
+}
+
+/* ---------- nav extras ---------- */
+.perp-terminal .nav__net {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  margin-left: 8px;
+}
+.perp-terminal .nav__link--soon {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.perp-terminal .gearwrap {
+  position: relative;
+}
+.perp-terminal .gearmenu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 900;
+  width: 210px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.perp-terminal .gearmenu__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  text-transform: capitalize;
+}
+.perp-terminal .gearmenu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.perp-terminal .gearmenu__item:hover {
+  background: var(--bg-hover);
+}
+
+/* ---------- nav account area ---------- */
+.perp-terminal .btn-outline {
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  background: none;
+}
+.perp-terminal .btn-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.perp-terminal .acctwrap {
+  position: relative;
+}
+.perp-terminal .acctmenu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 900;
+  width: 280px;
+  background: #101014;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+.perp-terminal .acctmenu__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.perp-terminal .acctmenu__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.perp-terminal .acctmenu__addr {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.perp-terminal .acctmenu__copy {
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 4px;
+}
+.perp-terminal .acctmenu__copy:hover {
+  color: var(--text);
+}
+.perp-terminal .acctmenu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.perp-terminal .acctmenu__item:hover {
+  background: var(--bg-hover);
+}
+.perp-terminal .acctmenu__item--dim {
+  color: var(--text-dim);
+}
+
+/* ---------- leverage / margin modals ---------- */
+.perp-terminal .lmodal__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0 18px;
+}
+.perp-terminal .lmodal__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill, 0%),
+    #2c2c34 var(--fill, 0%)
+  );
+}
+.perp-terminal .lmodal__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #555;
+  border: 4px solid var(--accent);
+  cursor: pointer;
+}
+.perp-terminal .lmodal__value {
+  min-width: 64px;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.perp-terminal .lmodal__warn {
+  margin-top: 12px;
+  border: 1px solid #8a6d1a;
+  background: rgba(138, 109, 26, 0.15);
+  color: #d9a521;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.perp-terminal .mmode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  font-size: 13.5px;
+}
+.perp-terminal .mmode--on {
+  border-color: var(--accent);
+}
+.perp-terminal .mmode .dim {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* TradingView widget container */
+.perp-terminal .chart--tv {
+  min-height: 0;
+}
+.perp-terminal .chart--tv .tradingview-widget-container iframe {
+  border-radius: 0;
+}
+
+/* ---------- order book v2 (based.one parity) ---------- */
+.perp-terminal .book__row {
+  line-height: 25px;
+  font-size: 12.5px;
+}
+.perp-terminal .book__depth--ask {
+  background: linear-gradient(to right, rgba(246, 70, 93, 0.22), rgba(246, 70, 93, 0.05));
+}
+.perp-terminal .book__depth--bid {
+  background: linear-gradient(to right, rgba(46, 189, 133, 0.2), rgba(46, 189, 133, 0.05));
+}
+@keyframes book-flash-ask {
+  0% {
+    background: rgba(246, 70, 93, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@keyframes book-flash-bid {
+  0% {
+    background: rgba(46, 189, 133, 0.26);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.perp-terminal .book__row--flash-ask {
+  animation: book-flash-ask 0.7s ease-out;
+}
+.perp-terminal .book__row--flash-bid {
+  animation: book-flash-bid 0.7s ease-out;
+}
+.perp-terminal .book__views {
+  display: flex;
+  gap: 6px;
+}
+.perp-terminal .bookview {
+  display: flex;
+  gap: 2px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  opacity: 0.55;
+}
+.perp-terminal .bookview--on {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  opacity: 1;
+}
+.perp-terminal .book__footer {
+  gap: 8px;
+}
+
+/* ---------- order type dropdown ---------- */
+.perp-terminal .chip--select {
+  white-space: nowrap;
+  flex: 1.5;
+}
+.perp-terminal .chip__val {
+  color: var(--text);
+}
+.perp-terminal .chip--open {
+  border-color: var(--accent);
+}
+.perp-terminal .chip--open .chip__val {
+  color: var(--accent);
+}
+.perp-terminal .typewrap {
+  position: relative;
+  flex: 1.5;
+  display: flex;
+}
+.perp-terminal .typewrap .chip {
+  flex: 1;
+}
+.perp-terminal .typemenu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 700;
+  width: 200px;
+  background: #101014;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
+}
+.perp-terminal .typemenu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.perp-terminal .typemenu__item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.perp-terminal .typemenu__item--on {
+  color: var(--accent);
+  background: var(--bg);
+}
+.perp-terminal .typemenu__item--soon {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- ticket v2: per-type layouts ---------- */
+.perp-terminal .pxdots {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0 6px;
+}
+.perp-terminal .pxdot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  padding: 0;
+}
+.perp-terminal .pxdot--bid {
+  background: var(--green);
+}
+.perp-terminal .pxdot--ask {
+  background: var(--red);
+}
+.perp-terminal .pxdot:hover {
+  transform: scale(1.15);
+}
+
+.perp-terminal .sliderrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.perp-terminal .sliderrow input[type='range'] {
+  flex: 1;
+}
+.perp-terminal .pctbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  width: 64px;
+  flex-shrink: 0;
+}
+.perp-terminal .pctbox input {
+  width: 100%;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.perp-terminal .stepper {
+  justify-content: space-between;
+}
+.perp-terminal .stepper__val {
+  flex: 1;
+  text-align: right;
+  font-size: 13.5px;
+}
+.perp-terminal .stepper__btns {
+  display: flex;
+  flex-direction: column;
+  margin-left: 8px;
+}
+.perp-terminal .stepper__btns button {
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 4px;
+  color: var(--text-dim);
+}
+.perp-terminal .stepper__btns button:hover {
+  color: var(--text);
+}
+
+.perp-terminal .slipbtn {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--text);
+  font-size: 12px;
+}
+.perp-terminal .slipedit input {
+  width: 44px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-align: right;
+  font-family: var(--mono);
+}
+
+.perp-terminal .ticket__foot {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
+}
+
+.perp-terminal .scalp {
+  display: grid;
+  /* minmax(0,...) lets columns shrink below field intrinsic width */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.perp-terminal .scalp__col {
+  min-width: 0;
+}
+.perp-terminal .scalp__col h4 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.perp-terminal .scalp__col .field {
+  margin-top: 8px;
+}
+.perp-terminal .scalp__col .check {
+  margin-top: 10px;
+}
+.perp-terminal .scalp__col .ticket__cta {
+  margin-top: 10px;
+  padding: 9px 0;
+  font-size: 13px;
+}
+.perp-terminal .scalp__entry {
+  font-size: 11.5px;
+  margin-top: 5px;
+}
+.perp-terminal .scalp__foot {
+  padding: 8px 10px;
+}
+.perp-terminal .scalp__foot .kv {
+  font-size: 11px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Aussivo integration layer
+   Appended after the ported rules so it wins on equal specificity. Three jobs:
+   fit the terminal under the app Navbar, fix contrast where the palette swap
+   broke it, and pick up Aussivo's glass/typography treatment.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Layout ──
+   The terminal was a whole-viewport app (height: 100vh). Here it lives below
+   the 74px Navbar, so it fills exactly what is left and scrolls internally. */
+.perp-terminal {
+  height: 100%;
+  min-height: 0;
+}
+.perp-terminal .app {
+  height: 100%;
+}
+
+/* ── Contrast ──
+   Brand green is far lighter than the orange it replaced, so white text on an
+   accent fill drops to ~1.7:1. Everything sitting on a green fill gets dark ink.
+   Excludes .btn-accent--chip: that variant keeps a dark elevated background,
+   so it needs the normal light text, not the dark-on-green ink. */
+.perp-terminal .btn-accent:not(.btn-accent--chip),
+.perp-terminal .ticket__cta--connect,
+.perp-terminal .nav__logo-mark,
+.perp-terminal .sideswitch__btn--buy.sideswitch__btn--on {
+  color: var(--on-accent);
+}
+.perp-terminal .btn-accent:not(.btn-accent--chip):hover,
+.perp-terminal .ticket__cta--connect:hover {
+  color: var(--on-accent);
+}
+.perp-terminal .btn-accent--chip {
+  color: var(--text);
+}
+
+/* ── Typography ── */
+.perp-terminal .mkthead__coin,
+.perp-terminal .panel__title {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ── Glass panels ──
+   Matches the .glass treatment used on /pools and /portfolio, at the lower
+   radius a dense trading grid needs. */
+.perp-terminal .panel {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(11, 17, 33, 0.9) 100%);
+  border: 1px solid rgba(0, 230, 118, 0.08);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+}
+.perp-terminal .panel:hover {
+  border-color: var(--border-glow);
+}
+.perp-terminal ::-webkit-scrollbar-track {
+  background: #0b1121;
+}
+.perp-terminal ::-webkit-scrollbar-thumb {
+  background: #1a2235;
+}
+.perp-terminal ::-webkit-scrollbar-thumb:hover {
+  background: #243049;
+}
+
+/* Network indicator in the status bar. Testnet is tinted so a mainnet build —
+   which spends real USDC — never looks like the safe one at a glance. */
+.perp-terminal .statusbar__net {
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.perp-terminal .statusbar__net--test {
+  border-color: rgba(0, 230, 118, 0.35);
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+/* The chart draws its own crosshair inside the canvas, so the arrow pointer on
+   top of it is redundant and reads as untuned. Crosshair cursor matches what
+   traders expect from a chart surface (TradingView, Hyperliquid, Binance).
+   Not `cursor: none` — losing the pointer entirely is disorienting while the
+   chart is empty or still loading.
+   Set on the container so it covers the plot area. lightweight-charts styles
+   its own time-axis cursor and that still wins; the price scale inherits the
+   crosshair, which is cosmetic only — its drag-to-scale behaviour is unchanged. */
+.perp-terminal .chart__canvas {
+  cursor: crosshair;
+}
+
+/* Quick-percentage buttons in the close-position modal. Sits on the slider's
+   mark row, so it inherits that row's spacing and stays aligned to the ticks. */
+.perp-terminal .closepct {
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.perp-terminal .closepct:hover {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--bg-hover);
+}

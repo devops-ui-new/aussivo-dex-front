@@ -8,6 +8,7 @@ import Pools from "./pages/Pools";
 import PoolDetail from "./pages/PoolDetail";
 import Portfolio from "./pages/Portfolio";
 import Swap from "./pages/Swap";
+import Perps from "./pages/Perps";
 import Referral from "./pages/Referral";
 import DepositQR from "./pages/DepositQR";
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -22,19 +23,29 @@ import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminYieldLogs from "./pages/admin/AdminYieldLogs";
 import AdminReferrals from "./pages/admin/AdminReferrals";
 
+// Navbar height — the terminal takes exactly the viewport left below it.
+const NAV_H = 74;
+
 export default function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname.startsWith("/admin");
+  // The perp terminal is full-bleed: it keeps the Navbar, drops the Footer, and
+  // owns its own scrolling (the panel grid must not grow the page).
+  const isTerminal = pathname.startsWith("/perps");
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {!isAdmin && <><div className="bg-mesh" /><div className="bg-grid" /><Navbar /><WalletPromptModal /></>}
-      <main className={`flex-1 ${!isAdmin ? "relative z-10" : ""}`}>
+    <div className={`flex flex-col ${isTerminal ? "h-screen overflow-hidden" : "min-h-screen"}`}>
+      {!isAdmin && <><div className="bg-mesh" /><div className="bg-grid" /><Navbar />{!isTerminal && <WalletPromptModal />}</>}
+      <main
+        className={`flex-1 ${!isAdmin ? "relative z-10" : ""} ${isTerminal ? "min-h-0 overflow-hidden" : ""}`}
+        style={isTerminal ? { height: `calc(100vh - ${NAV_H}px)` } : undefined}
+      >
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/pools" element={<Pools />} />
           <Route path="/pool/:id" element={<PoolDetail />} />
           <Route path="/swap" element={<Swap />} />
+          <Route path="/perps" element={<Perps />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/referral" element={<Referral />} />
           <Route path="/deposit/:vaultId" element={<DepositQR />} />
@@ -51,7 +62,7 @@ export default function App() {
           <Route path="/admin/referrals" element={<AdminReferrals />} />
         </Routes>
       </main>
-      {!isAdmin && <Footer />}
+      {!isAdmin && !isTerminal && <Footer />}
       <Toaster position="bottom-right" toastOptions={{
         style: { background: "#111827", color: "#e2e8f0", border: "1px solid rgba(0,230,118,0.15)", borderRadius: "12px", fontFamily: "DM Sans" },
         success: { iconTheme: { primary: "#00e676", secondary: "#060b18" } },

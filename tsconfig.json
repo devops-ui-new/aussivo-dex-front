@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "useDefineForClassFields": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    // The app is still mostly .jsx; TS only type-checks the ported perp terminal,
+    // but it must be able to resolve Web3Context.jsx (the shared wallet source).
+    // checkJs stays off so the untyped app code is never type-checked.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src/perps"]
+}
