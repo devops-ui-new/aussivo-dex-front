@@ -42,13 +42,13 @@ export default function App() {
       >
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/pools" element={<Pools />} />
+          {/* <Route path="/pools" element={<Pools />} /> */}
           <Route path="/pool/:id" element={<PoolDetail />} />
           <Route path="/swap" element={<Swap />} />
           <Route path="/perps" element={<Perps />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/referral" element={<Referral />} />
-          <Route path="/deposit/:vaultId" element={<DepositQR />} />
+          {/* <Route path="/deposit/:vaultId" element={<DepositQR />} /> */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/vaults" element={<AdminVaults />} />
