@@ -23,6 +23,28 @@ import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminYieldLogs from "./pages/admin/AdminYieldLogs";
 import AdminReferrals from "./pages/admin/AdminReferrals";
 
+
+/**
+ * Site-wide maintenance banner. Purely presentational — it touches no deposit, sweep or
+ * API logic. To take it down later, delete this component and the <MaintenanceBanner />
+ * line below. Hidden on /admin so the team can keep working.
+ */
+function MaintenanceBanner() {
+  return (
+    <div style={{
+      position: "sticky", top: 0, zIndex: 200,
+      background: "linear-gradient(90deg,#3a2a00,#5a3d00)",
+      borderBottom: "1px solid rgba(255,193,7,0.35)",
+      color: "#ffe08a", fontSize: 14, lineHeight: 1.5,
+      padding: "10px 16px", textAlign: "center",
+      fontFamily: "system-ui,-apple-system,sans-serif",
+    }}>
+      <strong style={{ color: "#ffc107" }}>⚠ Network issue.</strong>{" "}
+      Deposits are temporarily paused due to a blockchain network issue. Please try again in a few hours.
+    </div>
+  );
+}
+
 // Navbar height — the terminal takes exactly the viewport left below it.
 const NAV_H = 74;
 
@@ -35,6 +57,7 @@ export default function App() {
 
   return (
     <div className={`flex flex-col ${isTerminal ? "h-screen overflow-hidden" : "min-h-screen"}`}>
+      {!isAdmin && <MaintenanceBanner />}
       {!isAdmin && <><div className="bg-mesh" /><div className="bg-grid" /><Navbar />{!isTerminal && <WalletPromptModal />}</>}
       <main
         className={`flex-1 ${!isAdmin ? "relative z-10" : ""} ${isTerminal ? "min-h-0 overflow-hidden" : ""}`}
@@ -42,7 +65,7 @@ export default function App() {
       >
         <Routes>
           <Route path="/" element={<Home />} />
-          {/* <Route path="/pools" element={<Pools />} /> */}
+          <Route path="/pools" element={<Pools />} />
           <Route path="/pool/:id" element={<PoolDetail />} />
           <Route path="/swap" element={<Swap />} />
           <Route path="/perps" element={<Perps />} />

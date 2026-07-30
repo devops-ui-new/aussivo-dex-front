@@ -130,6 +130,7 @@ export default function PoolDetail() {
   const [timeframe, setTimeframe] = useState("1W");
   /** Active deposit session shown in full-screen modal (QR + poll until credited / matched). */
   const [depositModal, setDepositModal] = useState(null);
+  const [depositPausedNotice, setDepositPausedNotice] = useState(false);
   const [depositCancelConfirm, setDepositCancelConfirm] = useState(false);
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [expiresLeftMs, setExpiresLeftMs] = useState(null);
@@ -341,7 +342,17 @@ export default function PoolDetail() {
   const minDeposit = Number(pool.min_deposit ?? pool.minDeposit ?? 0);
   const maxDeposit = Number(pool.max_deposit ?? pool.maxDeposit ?? 0);
 
+  // ── DEPOSITS PAUSED (maintenance) ──
+  // Blocks new deposit-address generation while the blockchain infrastructure issue is
+  // being resolved. To re-enable deposits, set this to false (or delete the block).
+  // This is intentionally in front of the API call so no address is ever handed out.
+  const DEPOSITS_PAUSED = true;
+
   const handleDeposit = async () => {
+    if (DEPOSITS_PAUSED) {
+      setDepositPausedNotice(true);
+      return;
+    }
     if (!token) { toast.error("Please sign in first"); return; }
     setLoading(true);
     try {
@@ -670,6 +681,16 @@ export default function PoolDetail() {
                 className="w-full py-3.5 rounded-xl font-display font-bold text-base transition-all disabled:opacity-50 bg-gradient-to-r from-brand-dark to-brand text-white hover:shadow-lg hover:shadow-brand/20">
                 {loading ? "Generating address..." : token ? "Get Deposit Address →" : "Sign In to Invest"}
               </button>
+
+              {depositPausedNotice && (
+                <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 text-center">
+                  <div className="text-sm font-semibold text-amber-200">Network temporarily unavailable</div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-amber-100/70">
+                    Deposits are paused due to a temporary issue on the blockchain network.
+                    Please try again in a few hours.
+                  </p>
+                </div>
+              )}
             </>)) : (
               <div className="text-center py-8">
                 <p className="text-sm text-slate-400 mb-4">Manage your redemptions from your <Link to="/portfolio" className="text-brand font-semibold hover:underline">Portfolio</Link>.</p>
